@@ -1,6 +1,8 @@
 #ifndef E_MOD_MAIN_H
 #define E_MOD_MAIN_H
 
+#define EAPI __attribute__ ((visibility("default")))
+
 #ifdef ENABLE_NLS
 # include <libintl.h>
 # define D_(string) dgettext(PACKAGE, string)
