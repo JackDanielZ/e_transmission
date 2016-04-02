@@ -1,0 +1,47 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Marc Furtià  i Puig\\\n"
+"Report-Msgid-Bugs-To: $MSGID_BUGS_ADDRESS\n"
+"POT-Creation-Date: 2013-08-24 11:50+0200\n"
+"PO-Revision-Date: 2014-05-26 20:57+0000\n"
+"Last-Translator: joancoll <Unknown>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Launchpad-Export-Date: 2014-05-27 05:40+0000\n"
+"X-Generator: Launchpad (build 17017)\n"
+"Language: ca\n"
+"X-Poedit-Bookmarks: -1,-1,1139,-1,-1,-1,-1,-1,-1,-1\n"
+
+#: src/e_mod_main.c:132
+msgid "Cpu"
+msgstr "Processador"
+
+#: src/e_mod_main.c:374
+msgid "Fast (0.5 sec)"
+msgstr "Ràpid (0.5 s)"
+
+#: src/e_mod_main.c:381
+msgid "Medium (1 sec)"
+msgstr "Mitjà (1 s)"
+
+#: src/e_mod_main.c:388
+msgid "Normal (2 sec)"
+msgstr "Normal (2 s)"
+
+#: src/e_mod_main.c:395
+msgid "Slow (5 sec)"
+msgstr "Lent (5 s)"
+
+#: src/e_mod_main.c:402
+msgid "Very Slow (30 sec)"
+msgstr "Molt lent (30 s)"
+
+#: src/e_mod_main.c:409
+msgid "Time Between Updates"
+msgstr "Taxa d'actualització"
+
+#: src/e_mod_main.c:415
+msgid "Merge CPU's into single Statistic"
+msgstr "Combinar la CPU en un única estadística"
