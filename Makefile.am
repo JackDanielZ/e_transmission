@@ -21,8 +21,7 @@ EXTRA_DIST = module.desktop.in \
 	     e_modules-cpu.spec.in \
 	     e-module-cpu.edc \
 	     cpu.edc \
-	     images/cpu.png \
-	     images/module_icon.png
+	     images/transmission.png
 
 %.edj:  %.edc
 	$(EDJE_CC) $(EDJE_FLAGS) $< $@

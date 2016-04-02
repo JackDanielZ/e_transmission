@@ -1,5 +1,5 @@
 images {
-	image: "cpu.png" COMP;
+	image: "transmission.png" COMP;
 }
 collections {
 	group {
@@ -23,7 +23,7 @@ collections {
 						offset: -1 -1;
 					}
 					image {
-						normal: "cpu.png";
+						normal: "transmission.png";
 					}
 				}
 			}
