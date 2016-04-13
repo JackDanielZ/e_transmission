@@ -23,6 +23,7 @@ tags
 *.core
 *.exe
 *.o
+*.so
 *.lo
 *.a
 *.la
