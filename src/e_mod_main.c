@@ -12,108 +12,20 @@ struct _Instance
    Evas_Object *o_icon;
 };
 
-static E_Gadcon_Client *_gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style);
-static void _gc_shutdown(E_Gadcon_Client *gcc);
-static void _gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient);
-static const char *_gc_label(const E_Gadcon_Client_Class *client_class);
-static Evas_Object *_gc_icon(const E_Gadcon_Client_Class *client_class, Evas *evas);
-static const char *_gc_id_new(const E_Gadcon_Client_Class *client_class);
-static void _button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info);
-static void _menu_cb_post(void *data, E_Menu *m);
-
 static E_Config_DD *conf_edd = NULL;
 static E_Config_DD *conf_item_edd = NULL;
 
 Config *cpu_conf = NULL;
 
-static const E_Gadcon_Client_Class _gc_class =
-{
-   GADCON_CLIENT_CLASS_VERSION, "transmission",
-   {
-      _gc_init, _gc_shutdown, _gc_orient, _gc_label, _gc_icon, _gc_id_new, NULL, NULL
-   },
-   E_GADCON_CLIENT_STYLE_PLAIN
-};
-
-static E_Gadcon_Client *
-_gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
-{
-   Instance *inst;
-   E_Gadcon_Client *gcc;
-   char buf[4096];
-
-   inst = E_NEW(Instance, 1);
-
-   snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
-
-   inst->o_icon = edje_object_add(gc->evas);
-   if (!e_theme_edje_object_set(inst->o_icon,
-				"base/theme/modules/transmission", "modules/transmission/main"))
-      edje_object_file_set(inst->o_icon, buf, "modules/transmission/main");
-   evas_object_show(inst->o_icon);
-
-   gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
-   gcc->data = inst;
-   inst->gcc = gcc;
-
-   cpu_conf->instances = eina_list_append(cpu_conf->instances, inst);
-
-   evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
-				  _button_cb_mouse_down, inst);
-
-//   inst->timer = ecore_timer_add(inst->ci->interval, _set_cpu_load, inst);
-   return gcc;
-}
-
 static void
-_gc_shutdown(E_Gadcon_Client *gcc)
+_menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
 {
-   Instance *inst;
-
-   inst = gcc->data;
-
-   if (inst->timer) ecore_timer_del(inst->timer);
-   if (inst->o_icon) evas_object_del(inst->o_icon);
-
-   cpu_conf->instances = eina_list_remove(cpu_conf->instances, inst);
-   E_FREE(inst);
-}
-
-static void
-_gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
-{
-   e_gadcon_client_aspect_set(gcc, 32, 16);
-   e_gadcon_client_min_size_set(gcc, 32, 16);
-}
-
-static const char *
-_gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
-{
-   return "Transmission";
-}
-
-static Evas_Object *
-_gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
-{
-   Evas_Object *o;
-   char buf[4096];
-
-   if (!cpu_conf->module) return NULL;
-
-   snprintf(buf, sizeof(buf), "%s/e-module-transmission.edj", e_module_dir_get(cpu_conf->module));
-
-   o = edje_object_add(evas);
-   edje_object_file_set(o, buf, "icon");
-   return o;
-}
-
-static const char *
-_gc_id_new(const E_Gadcon_Client_Class *client_class)
-{
-   char buf[32];
-   static int id = 0;
-   sprintf(buf, "%s.%d", client_class->name, ++id);
-   return eina_stringshare_add(buf);
+   if (!cpu_conf->menu) return;
+   e_object_del(E_OBJECT(cpu_conf->menu));
+   cpu_conf->menu = NULL;
+   if (cpu_conf->menu_interval)
+     e_object_del(E_OBJECT(cpu_conf->menu_interval));
+   cpu_conf->menu_interval = NULL;
 }
 
 static void
@@ -234,15 +146,85 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      }
 }
 
-static void
-_menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
+static E_Gadcon_Client *
+_gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 {
-   if (!cpu_conf->menu) return;
-   e_object_del(E_OBJECT(cpu_conf->menu));
-   cpu_conf->menu = NULL;
-   if (cpu_conf->menu_interval)
-     e_object_del(E_OBJECT(cpu_conf->menu_interval));
-   cpu_conf->menu_interval = NULL;
+   Instance *inst;
+   E_Gadcon_Client *gcc;
+   char buf[4096];
+
+   inst = E_NEW(Instance, 1);
+
+   snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
+
+   inst->o_icon = edje_object_add(gc->evas);
+   if (!e_theme_edje_object_set(inst->o_icon,
+				"base/theme/modules/transmission", "modules/transmission/main"))
+      edje_object_file_set(inst->o_icon, buf, "modules/transmission/main");
+   evas_object_show(inst->o_icon);
+
+   gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
+   gcc->data = inst;
+   inst->gcc = gcc;
+
+   cpu_conf->instances = eina_list_append(cpu_conf->instances, inst);
+
+   evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
+				  _button_cb_mouse_down, inst);
+
+//   inst->timer = ecore_timer_add(inst->ci->interval, _set_cpu_load, inst);
+   return gcc;
+}
+
+static void
+_gc_shutdown(E_Gadcon_Client *gcc)
+{
+   Instance *inst;
+
+   inst = gcc->data;
+
+   if (inst->timer) ecore_timer_del(inst->timer);
+   if (inst->o_icon) evas_object_del(inst->o_icon);
+
+   cpu_conf->instances = eina_list_remove(cpu_conf->instances, inst);
+   E_FREE(inst);
+}
+
+static void
+_gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
+{
+   e_gadcon_client_aspect_set(gcc, 32, 16);
+   e_gadcon_client_min_size_set(gcc, 32, 16);
+}
+
+static const char *
+_gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
+{
+   return "Transmission";
+}
+
+static Evas_Object *
+_gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
+{
+   Evas_Object *o;
+   char buf[4096];
+
+   if (!cpu_conf->module) return NULL;
+
+   snprintf(buf, sizeof(buf), "%s/e-module-transmission.edj", e_module_dir_get(cpu_conf->module));
+
+   o = edje_object_add(evas);
+   edje_object_file_set(o, buf, "icon");
+   return o;
+}
+
+static const char *
+_gc_id_new(const E_Gadcon_Client_Class *client_class)
+{
+   char buf[32];
+   static int id = 0;
+   sprintf(buf, "%s.%d", client_class->name, ++id);
+   return eina_stringshare_add(buf);
 }
 
 #if 0
@@ -262,6 +244,15 @@ _cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 EAPI E_Module_Api e_modapi =
 {
    E_MODULE_API_VERSION, "Tranmission"
+};
+
+static const E_Gadcon_Client_Class _gc_class =
+{
+   GADCON_CLIENT_CLASS_VERSION, "transmission",
+   {
+      _gc_init, _gc_shutdown, _gc_orient, _gc_label, _gc_icon, _gc_id_new, NULL, NULL
+   },
+   E_GADCON_CLIENT_STYLE_PLAIN
 };
 
 EAPI void *
