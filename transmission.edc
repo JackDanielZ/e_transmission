@@ -7,7 +7,7 @@ styles
 {
    style
      {
-        name: "cpu_style";
+        name: "transmission_style";
         base: "font=Sans:style=Mono font_size=12 text_class=tb_plain align=center color=#fff style=outline_soft_shadow shadow_color=#00000032 wrap=word";
         tag:  "br" "\n";
      }
@@ -17,12 +17,12 @@ collections
 {
    group
      {
-	name: "modules/cpu/main";
+	name: "modules/transmission/main";
 	parts
 	  {
 	     part
 	       {
-		  name: "cpu";
+		  name: "transmission";
 		  description
 		    {
 		       state: "default" 0.0;
@@ -42,11 +42,11 @@ collections
 		    {
 		       state: "default" 0.0;
 		       align: 0.5 0.5;
-		       rel1.to: "cpu";
-		       rel2.to: "cpu";
+		       rel1.to: "transmission";
+		       rel2.to: "transmission";
                        text
                          {
-                            style: "cpu_style";
+                            style: "transmission_style";
                             min: 0 1;
                          }
                     }

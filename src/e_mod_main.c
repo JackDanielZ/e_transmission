@@ -50,7 +50,7 @@ static float update_interval;
 
 static const E_Gadcon_Client_Class _gc_class =
 {
-   GADCON_CLIENT_CLASS_VERSION, "cpu",
+   GADCON_CLIENT_CLASS_VERSION, "transmission",
    {
       _gc_init, _gc_shutdown, _gc_orient, _gc_label, _gc_icon, _gc_id_new, NULL, NULL
    },
@@ -73,12 +73,12 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    cpu = E_NEW(Cpu, 1);
    cpu->inst = inst;
 
-   snprintf(buf, sizeof(buf), "%s/cpu.edj", e_module_dir_get(cpu_conf->module));
+   snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
 
    cpu->o_icon = edje_object_add(gc->evas);
    if (!e_theme_edje_object_set(cpu->o_icon,
-				"base/theme/modules/cpu", "modules/cpu/main"))
-      edje_object_file_set(cpu->o_icon, buf, "modules/cpu/main");
+				"base/theme/modules/transmission", "modules/transmission/main"))
+      edje_object_file_set(cpu->o_icon, buf, "modules/transmission/main");
    evas_object_show(cpu->o_icon);
 
    gcc = e_gadcon_client_new(gc, name, id, style, cpu->o_icon);
@@ -122,7 +122,7 @@ _gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
 static const char *
 _gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 {
-   return D_("Cpu");
+   return D_("Transmission");
 }
 
 static Evas_Object *
@@ -133,7 +133,7 @@ _gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
 
    if (!cpu_conf->module) return NULL;
 
-   snprintf(buf, sizeof(buf), "%s/e-module-cpu.edj", e_module_dir_get(cpu_conf->module));
+   snprintf(buf, sizeof(buf), "%s/e-module-transmission.edj", e_module_dir_get(cpu_conf->module));
 
    o = edje_object_add(evas);
    edje_object_file_set(o, buf, "icon");
@@ -506,7 +506,7 @@ _cpu_menu_merge_cpus(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNU
 
 EAPI E_Module_Api e_modapi =
 {
-   E_MODULE_API_VERSION, "Cpu"
+   E_MODULE_API_VERSION, "Tranmission"
 };
 
 EAPI void *
@@ -535,7 +535,7 @@ e_modapi_init(E_Module *m)
    #define D conf_edd
    E_CONFIG_LIST(D, T, items, conf_item_edd);
 
-   cpu_conf = e_config_domain_load("module.cpu", conf_edd);
+   cpu_conf = e_config_domain_load("module.transmission", conf_edd);
    if (!cpu_conf)
      {
 	Config_Item *ci;
@@ -585,6 +585,6 @@ e_modapi_shutdown(E_Module *m EINA_UNUSED)
 EAPI int
 e_modapi_save(E_Module *m EINA_UNUSED)
 {
-   e_config_domain_save("module.cpu", conf_edd, cpu_conf);
+   e_config_domain_save("module.transmission", conf_edd, cpu_conf);
    return 1;
 }
