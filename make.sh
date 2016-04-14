@@ -12,4 +12,5 @@ MODULE_ARCH="linux-gnu-$host_cpu-$release"
 
 sudo /usr/bin/mkdir -p '/opt/e/lib/enlightenment/modules/transmission/'$MODULE_ARCH
 sudo /usr/bin/install -c src/module.so /opt/e/lib/enlightenment/modules/transmission/$MODULE_ARCH/module.so
+sudo /usr/bin/install -c module.desktop /opt/e/lib/enlightenment/modules/transmission/module.desktop
 sudo /usr/bin/install -c -m 644 e-module-transmission.edj transmission.edj '/opt/e/lib/enlightenment/modules/transmission'
