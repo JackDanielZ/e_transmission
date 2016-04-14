@@ -374,13 +374,30 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      {
         if (!inst->popup)
           {
+             Evas_Object *items_box, *button;
              inst->popup = e_gadcon_popup_new(inst->gcc, 0);
-             Evas_Object *button = elm_button_add(e_comp->elm);
+
+             items_box = elm_box_add(e_comp->elm);
+             evas_object_size_hint_align_set(items_box, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(items_box, EVAS_HINT_EXPAND, 0.0);
+
+             button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
              elm_object_text_set(button, "Popup");
+             elm_box_pack_end(items_box, button);
              evas_object_show(button);
-             e_gadcon_popup_content_set(inst->popup, button);
+
+             button = elm_button_add(items_box);
+             evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
+             elm_object_text_set(button, "Popup 2");
+             elm_box_pack_end(items_box, button);
+             evas_object_show(button);
+
+             evas_object_show(items_box);
+
+             e_gadcon_popup_content_set(inst->popup, items_box);
              e_comp_object_util_autoclose(inst->popup->comp_object,
                    _popup_comp_del_cb, NULL, inst);
              e_gadcon_popup_show(inst->popup);
