@@ -123,7 +123,7 @@ _gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
 static const char *
 _gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 {
-   return D_("Transmission");
+   return "Transmission";
 }
 
 static Evas_Object *
@@ -400,48 +400,48 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 	cpu_conf->menu_interval = mo;
 
 	mi = e_menu_item_new(mo);
-	e_menu_item_label_set(mi, D_("Fast (0.5 sec)"));
+	e_menu_item_label_set(mi, "Fast (0.5 sec)");
 	e_menu_item_radio_set(mi, 1);
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval <= 0.5) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_fast, inst);
 
 	mi = e_menu_item_new(mo);
-	e_menu_item_label_set(mi, D_("Medium (1 sec)"));
+	e_menu_item_label_set(mi, "Medium (1 sec)");
 	e_menu_item_radio_set(mi, 1);
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval > 0.5) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_medium, inst);
 
 	mi = e_menu_item_new(mo);
-	e_menu_item_label_set(mi, D_("Normal (2 sec)"));
+	e_menu_item_label_set(mi, "Normal (2 sec)");
 	e_menu_item_radio_set(mi, 1);
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval >= 2.0) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_normal, inst);
 
 	mi = e_menu_item_new(mo);
-	e_menu_item_label_set(mi, D_("Slow (5 sec)"));
+	e_menu_item_label_set(mi, "Slow (5 sec)");
 	e_menu_item_radio_set(mi, 1);
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval >= 5.0) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_slow, inst);
 
 	mi = e_menu_item_new(mo);
-	e_menu_item_label_set(mi, D_("Very Slow (30 sec)"));
+	e_menu_item_label_set(mi, "Very Slow (30 sec)");
 	e_menu_item_radio_set(mi, 1);
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval >= 30.0) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_very_slow, inst);
 
         mi = e_menu_item_new(m);
-	e_menu_item_label_set(mi, D_("Time Between Updates"));
+	e_menu_item_label_set(mi, "Time Between Updates");
 	e_menu_item_submenu_set(mi, cpu_conf->menu_interval);
 
         if (cpu_count > 1)
           {
              mi = e_menu_item_new(m);
-             e_menu_item_label_set(mi, D_("Merge CPU's into single Statistic"));
+             e_menu_item_label_set(mi, "Merge CPU's into single Statistic");
              e_menu_item_check_set(mi, 1);
              if (inst->ci->merge_cpus) e_menu_item_toggle_set(mi, 1);
              e_menu_item_callback_set(mi, _cpu_menu_merge_cpus, inst);
@@ -551,12 +551,6 @@ EAPI E_Module_Api e_modapi =
 EAPI void *
 e_modapi_init(E_Module *m)
 {
-   char buf[4096];
-
-   snprintf(buf, sizeof(buf), "%s/locale", e_module_dir_get(m));
-   bindtextdomain(PACKAGE, buf);
-   bind_textdomain_codeset(PACKAGE, "UTF-8");
-
    conf_item_edd = E_CONFIG_DD_NEW("Cpu_Config_Item", Config_Item);
    conf_edd = E_CONFIG_DD_NEW("Cpu_Config", Config);
 
