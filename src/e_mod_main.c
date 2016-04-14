@@ -12,7 +12,7 @@
 typedef struct _Instance Instance;
 typedef struct _Cpu Cpu;
 
-struct _Instance 
+struct _Instance
 {
    E_Gadcon_Client *gcc;
    Cpu *cpu;
@@ -20,7 +20,7 @@ struct _Instance
    Config_Item *ci;
 };
 
-struct _Cpu 
+struct _Cpu
 {
    Instance *inst;
    Evas_Object *o_icon;
@@ -54,9 +54,9 @@ static int cpu_count;
 static int cpu_stats[MAX_CPU];
 static float update_interval;
 
-static const E_Gadcon_Client_Class _gc_class = 
+static const E_Gadcon_Client_Class _gc_class =
 {
-   GADCON_CLIENT_CLASS_VERSION, "cpu", 
+   GADCON_CLIENT_CLASS_VERSION, "cpu",
    {
       _gc_init, _gc_shutdown, _gc_orient, _gc_label, _gc_icon, _gc_id_new, NULL, NULL
    },
@@ -64,7 +64,7 @@ static const E_Gadcon_Client_Class _gc_class =
 };
 
 static E_Gadcon_Client *
-_gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style) 
+_gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 {
    Cpu *cpu;
    Instance *inst;
@@ -73,19 +73,18 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 
    cpu_count = _get_cpu_count();
 
-   inst = E_NEW(Instance, 1);   
+   inst = E_NEW(Instance, 1);
    inst->ci = _config_item_get(id);
 
    cpu = E_NEW(Cpu, 1);
    cpu->inst = inst;
 
-   snprintf(buf, sizeof(buf), "%s/cpu.edj", 
-	    e_module_dir_get(cpu_conf->module));
+   snprintf(buf, sizeof(buf), "%s/cpu.edj", e_module_dir_get(cpu_conf->module));
 
    cpu->o_icon = edje_object_add(gc->evas);
-   if (!e_theme_edje_object_set(cpu->o_icon, 
+   if (!e_theme_edje_object_set(cpu->o_icon,
 				"base/theme/modules/cpu", "modules/cpu/main"))
-     edje_object_file_set(cpu->o_icon, buf, "modules/cpu/main");
+      edje_object_file_set(cpu->o_icon, buf, "modules/cpu/main");
    evas_object_show(cpu->o_icon);
 
    gcc = e_gadcon_client_new(gc, name, id, style, cpu->o_icon);
@@ -103,7 +102,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 }
 
 static void
-_gc_shutdown(E_Gadcon_Client *gcc) 
+_gc_shutdown(E_Gadcon_Client *gcc)
 {
    Instance *inst;
    Cpu *cpu;
@@ -120,28 +119,27 @@ _gc_shutdown(E_Gadcon_Client *gcc)
 }
 
 static void
-_gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient) 
+_gc_orient(E_Gadcon_Client *gcc, E_Gadcon_Orient orient EINA_UNUSED)
 {
    e_gadcon_client_aspect_set(gcc, 32, 16);
    e_gadcon_client_min_size_set(gcc, 32, 16);
 }
 
 static const char *
-_gc_label(const E_Gadcon_Client_Class *client_class) 
+_gc_label(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 {
    return D_("Cpu");
 }
 
 static Evas_Object *
-_gc_icon(const E_Gadcon_Client_Class *client_class, Evas *evas) 
+_gc_icon(const E_Gadcon_Client_Class *client_class EINA_UNUSED, Evas *evas)
 {
    Evas_Object *o;
    char buf[4096];
 
    if (!cpu_conf->module) return NULL;
 
-   snprintf(buf, sizeof(buf), "%s/e-module-cpu.edj", 
-	    e_module_dir_get(cpu_conf->module));
+   snprintf(buf, sizeof(buf), "%s/e-module-cpu.edj", e_module_dir_get(cpu_conf->module));
 
    o = edje_object_add(evas);
    edje_object_file_set(o, buf, "icon");
@@ -149,16 +147,14 @@ _gc_icon(const E_Gadcon_Client_Class *client_class, Evas *evas)
 }
 
 static const char *
-_gc_id_new(const E_Gadcon_Client_Class *client_class)
+_gc_id_new(const E_Gadcon_Client_Class *client_class EINA_UNUSED)
 {
-   Config_Item *ci;
-
-   ci = _config_item_get(NULL);
+   Config_Item *ci = _config_item_get(NULL);
    return ci->id;
 }
 
 static Config_Item *
-_config_item_get(const char *id) 
+_config_item_get(const char *id)
 {
    Eina_List *l = NULL;
    Config_Item *ci;
@@ -180,7 +176,7 @@ _config_item_get(const char *id)
      }
    else
      {
-	for (l = cpu_conf->items; l; l = l->next) 
+	for (l = cpu_conf->items; l; l = l->next)
 	  {
 	     ci = l->data;
 	     if (!ci->id) continue;
@@ -202,8 +198,8 @@ _config_item_get(const char *id)
    return ci;
 }
 
-static Eina_Bool 
-_set_cpu_load(void *data) 
+static Eina_Bool
+_set_cpu_load(void *data)
 {
    Instance *inst;
    Cpu *cpu;
@@ -262,7 +258,7 @@ _get_cpu_count(void)
 }
 
 static int
-_get_cpu_load(Instance *inst) 
+_get_cpu_load(Instance *inst)
 {
 #ifdef __FreeBSD__
    long cp_time[CPUSTATES];
@@ -290,12 +286,12 @@ _get_cpu_load(Instance *inst)
    new_used = cp_time[CP_USER] + cp_time[CP_NICE] + cp_time[CP_SYS];
    new_tot = new_used + cp_time[CP_IDLE];
 
-   cpu_stats[0] = 
+   cpu_stats[0] =
      (100 * (float)(new_used - old_used) / (float)(new_tot - old_tot)) / update_interval;
 
    old_tot = new_tot;
-   old_used = new_used; 
-   
+   old_used = new_used;
+
    cpu_stats[0] = (cpu_stats[0] > 100 ? 100 : cpu_stats[0]);
 #else
    if (!(stat = fopen("/proc/stat", "r"))) return -1;
@@ -326,7 +322,7 @@ _get_cpu_load(Instance *inst)
 	     tmp_n = ((new_n - old_n[i]));
 	     tmp_s = ((new_s - old_s[i]));
 	  }
-	
+
         if (inst->ci->merge_cpus)
           cpu_stats[i] = (tmp_u + tmp_n + tmp_s) / update_interval / cpu_count;
         else
@@ -338,7 +334,7 @@ _get_cpu_load(Instance *inst)
 	old_wa[i] = new_wa;
 	old_hi[i] = new_hi;
 	old_si[i] = new_si;
-	
+
 	cpu_stats[i] = (cpu_stats[i] > 100 ? 100 : cpu_stats[i]);
 
         if (inst->ci->merge_cpus)
@@ -352,11 +348,11 @@ _get_cpu_load(Instance *inst)
 }
 
 static void
-_button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
+_button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNUSED, void *event_info)
 {
    Instance *inst;
    Evas_Event_Mouse_Down *ev;
-   
+
    inst = data;
    ev = event_info;
    if ((ev->button == 3) && (!cpu_conf->menu))
@@ -364,12 +360,12 @@ _button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	E_Menu *m, *mo;
 	E_Menu_Item *mi;
 	int cx, cy, cw, ch;
-	
-	m = e_menu_new();
+
+        m = e_menu_new();
 
 	mo = e_menu_new();
 	cpu_conf->menu_interval = mo;
-	
+
 	mi = e_menu_item_new(mo);
 	e_menu_item_label_set(mi, D_("Fast (0.5 sec)"));
 	e_menu_item_radio_set(mi, 1);
@@ -404,8 +400,8 @@ _button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 	e_menu_item_radio_group_set(mi, 1);
 	if (inst->ci->interval >= 30.0) e_menu_item_toggle_set(mi, 1);
 	e_menu_item_callback_set(mi, _cpu_menu_very_slow, inst);
-	
-	mi = e_menu_item_new(m);
+
+        mi = e_menu_item_new(m);
 	e_menu_item_label_set(mi, D_("Time Between Updates"));
 	e_menu_item_submenu_set(mi, cpu_conf->menu_interval);
 
@@ -421,7 +417,7 @@ _button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
         m = e_gadcon_client_util_menu_items_append(inst->gcc, m, 0);
 	e_menu_post_deactivate_callback_set(m, _menu_cb_post, inst);
 	cpu_conf->menu = m;
-	
+
 	e_gadcon_canvas_zone_geometry_get(inst->gcc->gadcon, &cx, &cy, &cw, &ch);
 	e_menu_activate_mouse(m,
 			      e_zone_current_get(),
@@ -433,7 +429,7 @@ _button_cb_mouse_down(void *data, Evas *e, Evas_Object *obj, void *event_info)
 }
 
 static void
-_menu_cb_post(void *data, E_Menu *m)
+_menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
 {
    if (!cpu_conf->menu) return;
    e_object_del(E_OBJECT(cpu_conf->menu));
@@ -442,12 +438,12 @@ _menu_cb_post(void *data, E_Menu *m)
      e_object_del(E_OBJECT(cpu_conf->menu_interval));
    cpu_conf->menu_interval = NULL;
 }
-   
+
 static void
-_cpu_menu_fast(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
- 
+
    inst = data;
    inst->ci->interval = 0.5;
    ecore_timer_del(inst->timer);
@@ -456,10 +452,10 @@ _cpu_menu_fast(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 static void
-_cpu_menu_medium(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_medium(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
- 
+
    inst = data;
    inst->ci->interval = 1.0;
    ecore_timer_del(inst->timer);
@@ -468,10 +464,10 @@ _cpu_menu_medium(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 static void
-_cpu_menu_normal(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_normal(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
- 
+
    inst = data;
    inst->ci->interval = 2.0;
    ecore_timer_del(inst->timer);
@@ -480,7 +476,7 @@ _cpu_menu_normal(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 static void
-_cpu_menu_slow(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_slow(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
 
@@ -492,7 +488,7 @@ _cpu_menu_slow(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 static void
-_cpu_menu_very_slow(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_very_slow(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
 
@@ -504,7 +500,7 @@ _cpu_menu_very_slow(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 static void
-_cpu_menu_merge_cpus(void *data, E_Menu *m, E_Menu_Item *mi)
+_cpu_menu_merge_cpus(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 {
    Instance *inst;
 
@@ -514,13 +510,13 @@ _cpu_menu_merge_cpus(void *data, E_Menu *m, E_Menu_Item *mi)
 }
 
 
-EAPI E_Module_Api e_modapi = 
+EAPI E_Module_Api e_modapi =
 {
    E_MODULE_API_VERSION, "Cpu"
 };
 
 EAPI void *
-e_modapi_init(E_Module *m) 
+e_modapi_init(E_Module *m)
 {
    char buf[4096];
 
@@ -530,7 +526,7 @@ e_modapi_init(E_Module *m)
 
    conf_item_edd = E_CONFIG_DD_NEW("Cpu_Config_Item", Config_Item);
    conf_edd = E_CONFIG_DD_NEW("Cpu_Config", Config);
-   
+
    #undef T
    #define T Config_Item
    #undef D
@@ -538,51 +534,49 @@ e_modapi_init(E_Module *m)
    E_CONFIG_VAL(D, T, id, STR);
    E_CONFIG_VAL(D, T, interval, DOUBLE);
    E_CONFIG_VAL(D, T, merge_cpus, INT);
-   
+
    #undef T
    #define T Config
    #undef D
    #define D conf_edd
    E_CONFIG_LIST(D, T, items, conf_item_edd);
-   
+
    cpu_conf = e_config_domain_load("module.cpu", conf_edd);
-   if (!cpu_conf) 
+   if (!cpu_conf)
      {
 	Config_Item *ci;
-	
+
 	cpu_conf = E_NEW(Config, 1);
 	ci = E_NEW(Config_Item, 1);
 	ci->id = eina_stringshare_add("0");
 	ci->interval = 1;
 	ci->merge_cpus = 0;
-	
+
 	cpu_conf->items = eina_list_append(cpu_conf->items, ci);
      }
-   
+
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
    return m;
 }
 
 EAPI int
-e_modapi_shutdown(E_Module *m) 
+e_modapi_shutdown(E_Module *m EINA_UNUSED)
 {
    cpu_conf->module = NULL;
    e_gadcon_provider_unregister(&_gc_class);
    if (cpu_conf->config_dialog)
      e_object_del(E_OBJECT(cpu_conf->config_dialog));
-   if (cpu_conf->menu) 
+   if (cpu_conf->menu)
      {
 	e_menu_post_deactivate_callback_set(cpu_conf->menu, NULL, NULL);
 	e_object_del(E_OBJECT(cpu_conf->menu));
 	cpu_conf->menu = NULL;
      }
 
-   while (cpu_conf->items) 
+   while (cpu_conf->items)
      {
-	Config_Item *ci;
-	
-	ci = cpu_conf->items->data;
+	Config_Item *ci = cpu_conf->items->data;
 	if (ci->id) eina_stringshare_del(ci->id);
 	cpu_conf->items = eina_list_remove_list(cpu_conf->items, cpu_conf->items);
 	E_FREE(ci);
@@ -595,7 +589,7 @@ e_modapi_shutdown(E_Module *m)
 }
 
 EAPI int
-e_modapi_save(E_Module *m) 
+e_modapi_save(E_Module *m EINA_UNUSED)
 {
    e_config_domain_save("module.cpu", conf_edd, cpu_conf);
    return 1;

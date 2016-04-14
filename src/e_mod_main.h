@@ -1,6 +1,9 @@
 #ifndef E_MOD_MAIN_H
 #define E_MOD_MAIN_H
 
+#ifdef EAPI
+#undef EAPI
+#endif
 #define EAPI __attribute__ ((visibility("default")))
 
 #ifdef ENABLE_NLS
@@ -15,7 +18,7 @@
 typedef struct _Config Config;
 typedef struct _Config_Item Config_Item;
 
-struct _Config 
+struct _Config
 {
    E_Module        *module;
    E_Config_Dialog *config_dialog;
@@ -24,7 +27,7 @@ struct _Config
    Eina_List       *items;
 };
 
-struct _Config_Item 
+struct _Config_Item
 {
    const char *id;
    double interval;
