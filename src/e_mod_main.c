@@ -1,12 +1,6 @@
 #include <e.h>
 #include "e_mod_main.h"
 
-#ifdef __FreeBSD__
-#include <sys/types.h>
-#include <sys/sysctl.h>
-#include <sys/resource.h>
-#endif
-
 #define MAX_CPU 16	// FIXME: Yes, that's not so clever...
 
 typedef struct _Instance Instance;
