@@ -1,7 +1,13 @@
 #include <e.h>
+#include <Ecore.h>
+#include <Ecore_Con.h>
 #include "e_mod_main.h"
 
 typedef struct _Instance Instance;
+
+static char but_str[1000000] = "";
+
+static char *session_id = NULL;
 
 struct _Instance
 {
@@ -77,7 +83,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, "Popup 2");
+             elm_object_text_set(button, but_str);
              elm_box_pack_end(items_box, button);
              evas_object_show(button);
 
@@ -243,7 +249,7 @@ _cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 
 EAPI E_Module_Api e_modapi =
 {
-   E_MODULE_API_VERSION, "Tranmission"
+   E_MODULE_API_VERSION, "Transmission"
 };
 
 static const E_Gadcon_Client_Class _gc_class =
@@ -254,6 +260,55 @@ static const E_Gadcon_Client_Class _gc_class =
    },
    E_GADCON_CLIENT_STYLE_PLAIN
 };
+
+static const char *baseUrl = "http://127.0.0.1:9091/transmission/rpc";
+
+static Eina_Bool
+_url_complete_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+{
+   Ecore_Con_Event_Url_Complete *url_complete = event_info;
+
+   if (!session_id)
+     {
+        const Eina_List *hdrs = ecore_con_url_response_headers_get(url_complete->url_con), *itr;
+        char *hdr;
+        EINA_LIST_FOREACH(hdrs, itr, hdr)
+          {
+             if (strstr(hdr, "X-Transmission-Session-Id"))
+               {
+                  char *tmp;
+                  session_id = strdup(hdr);
+                  tmp = session_id;
+                  while (*tmp)
+                    {
+                       if (*tmp == 0x0D) *tmp = '\0';
+                       else tmp++;
+                    }
+                  sprintf(but_str, "%s", session_id);
+               }
+          }
+     }
+
+   return EINA_TRUE;
+}
+
+static Eina_Bool
+_poller_start()
+{
+   Ecore_Con_Url *ec_url = NULL;
+   ecore_init();
+   ecore_con_init();
+   ecore_con_url_init();
+
+   ec_url = ecore_con_url_new(baseUrl);
+   if (!ec_url) return EINA_FALSE;
+
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _url_complete_cb, NULL);
+
+   ecore_con_url_get(ec_url);
+   return EINA_TRUE;
+}
 
 EAPI void *
 e_modapi_init(E_Module *m)
@@ -291,6 +346,8 @@ e_modapi_init(E_Module *m)
 
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
+
+   _poller_start();
    return m;
 }
 
