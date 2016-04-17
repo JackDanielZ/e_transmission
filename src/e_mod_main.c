@@ -264,7 +264,7 @@ static const E_Gadcon_Client_Class _gc_class =
 static const char *baseUrl = "http://127.0.0.1:9091/transmission/rpc";
 
 static Eina_Bool
-_url_complete_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+_session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
 
@@ -311,7 +311,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
    if (!ec_url) return EINA_FALSE;
 
    ecore_con_url_proxy_set(ec_url, NULL);
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _url_complete_cb, NULL);
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _session_id_get_cb, NULL);
 
    ecore_con_url_get(ec_url);
    return EINA_TRUE;
