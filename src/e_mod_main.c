@@ -268,37 +268,44 @@ _url_complete_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
 
-   if (!session_id)
+   if (url_complete->status)
      {
-        const Eina_List *hdrs = ecore_con_url_response_headers_get(url_complete->url_con), *itr;
-        char *hdr;
-        EINA_LIST_FOREACH(hdrs, itr, hdr)
+        if (!session_id)
           {
-             if (strstr(hdr, "X-Transmission-Session-Id"))
+             const Eina_List *hdrs = ecore_con_url_response_headers_get(url_complete->url_con), *itr;
+             char *hdr;
+             EINA_LIST_FOREACH(hdrs, itr, hdr)
                {
-                  char *tmp;
-                  session_id = strdup(hdr);
-                  tmp = session_id;
-                  while (*tmp)
+                  if (strstr(hdr, "X-Transmission-Session-Id"))
                     {
-                       if (*tmp == 0x0D) *tmp = '\0';
-                       else tmp++;
+                       char *tmp;
+                       session_id = strdup(hdr + 27);
+                       tmp = session_id;
+                       while (*tmp)
+                         {
+                            if (*tmp == 0x0D) *tmp = '\0';
+                            else tmp++;
+                         }
                     }
-                  sprintf(but_str, "%s", session_id);
                }
+             sprintf(but_str, "%s", session_id);
           }
      }
+   else
+     {
+        sprintf(but_str, "Error %d", url_complete->status);
+        free(session_id);
+        session_id = NULL;
+     }
+
 
    return EINA_TRUE;
 }
 
 static Eina_Bool
-_poller_start()
+_session_id_poller_cb(void *data EINA_UNUSED)
 {
    Ecore_Con_Url *ec_url = NULL;
-   ecore_init();
-   ecore_con_init();
-   ecore_con_url_init();
 
    ec_url = ecore_con_url_new(baseUrl);
    if (!ec_url) return EINA_FALSE;
@@ -313,6 +320,10 @@ _poller_start()
 EAPI void *
 e_modapi_init(E_Module *m)
 {
+   ecore_init();
+   ecore_con_init();
+   ecore_con_url_init();
+
    conf_item_edd = E_CONFIG_DD_NEW("Cpu_Config_Item", Config_Item);
    conf_edd = E_CONFIG_DD_NEW("Cpu_Config", Config);
 
@@ -347,7 +358,8 @@ e_modapi_init(E_Module *m)
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
 
-   _poller_start();
+   ecore_timer_add(5.0, _session_id_poller_cb, NULL);
+   _session_id_poller_cb(NULL);
    return m;
 }
 
@@ -376,6 +388,10 @@ e_modapi_shutdown(E_Module *m EINA_UNUSED)
    E_FREE(cpu_conf);
    E_CONFIG_DD_FREE(conf_item_edd);
    E_CONFIG_DD_FREE(conf_edd);
+
+   ecore_con_url_shutdown();
+   ecore_con_shutdown();
+   ecore_shutdown();
    return 1;
 }
 
