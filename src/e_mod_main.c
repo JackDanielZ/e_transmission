@@ -3,9 +3,12 @@
 #include <Ecore_Con.h>
 #include "e_mod_main.h"
 
+static void *_url_session_id_data_test = (void *)0;
+static void *_url_torrents_data_test = (void *)1;
 typedef struct _Instance Instance;
 
-static char but_str[1000000] = "";
+static char but1_str[1000000] = "";
+static char but2_str[1000000] = "";
 
 static char *session_id = NULL;
 
@@ -76,14 +79,14 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, "Popup");
+             elm_object_text_set(button, but1_str);
              elm_box_pack_end(items_box, button);
              evas_object_show(button);
 
              button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, but_str);
+             elm_object_text_set(button, but2_str);
              elm_box_pack_end(items_box, button);
              evas_object_show(button);
 
@@ -267,6 +270,8 @@ static Eina_Bool
 _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
+   void **test = ecore_con_url_data_get(url_complete->url_con);
+   if (!test || *test != _url_session_id_data_test) return EINA_TRUE;
 
    if (url_complete->status)
      {
@@ -288,32 +293,79 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
                          }
                     }
                }
-             sprintf(but_str, "%s", session_id);
+             sprintf(but1_str, "%s", session_id);
           }
      }
    else
      {
-        sprintf(but_str, "Error %d", url_complete->status);
+        sprintf(but1_str, "Error %d", url_complete->status);
         free(session_id);
         session_id = NULL;
      }
 
-
-   return EINA_TRUE;
+   return EINA_FALSE;
 }
 
 static Eina_Bool
 _session_id_poller_cb(void *data EINA_UNUSED)
 {
-   Ecore_Con_Url *ec_url = NULL;
-
-   ec_url = ecore_con_url_new(baseUrl);
-   if (!ec_url) return EINA_FALSE;
-
+   Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
+   if (!ec_url) return EINA_TRUE;
    ecore_con_url_proxy_set(ec_url, NULL);
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _session_id_get_cb, NULL);
-
+   ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
    ecore_con_url_get(ec_url);
+   return EINA_TRUE;
+}
+
+static char *_torrents_data_buf = NULL;
+static int _torrents_data_buf_len = 0, _torrents_data_len = 0;
+
+static Eina_Bool
+_torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+{
+   Ecore_Con_Event_Url_Data *url_data = event_info;
+   void **test = ecore_con_url_data_get(url_data->url_con);
+   if (!test || *test != _url_torrents_data_test) return EINA_TRUE;
+   if (url_data->size > (_torrents_data_buf_len - _torrents_data_len))
+     {
+        _torrents_data_buf_len = _torrents_data_len + url_data->size;
+        _torrents_data_buf = realloc(_torrents_data_buf, _torrents_data_buf_len + 1);
+     }
+   memcpy(_torrents_data_buf + _torrents_data_len, url_data->data, url_data->size);
+   _torrents_data_len += url_data->size;
+   _torrents_data_buf[_torrents_data_len] = '\0';
+   sprintf(but2_str, "%s", _torrents_data_buf);
+   return EINA_FALSE;
+}
+
+static Eina_Bool
+_torrents_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+{
+   Ecore_Con_Event_Url_Complete *url_complete = event_info;
+
+   if (url_complete->status && _torrents_data_len)
+     {
+        sprintf(but2_str, "%s", _torrents_data_buf);
+     }
+   _torrents_data_len = 0;
+   return EINA_FALSE;
+}
+
+static Eina_Bool
+_torrents_poller_cb(void *data EINA_UNUSED)
+{
+   const char *fields_list = "{\"arguments\":{\"fields\":[\"leftUntilDone\", \"name\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   int len = strlen(fields_list);
+   if (!session_id) return EINA_TRUE;
+   Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
+   if (!ec_url) return EINA_TRUE;
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_con_url_data_set(ec_url, &_url_torrents_data_test);
+
+   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", session_id);
+   //ecore_con_url_additional_header_add(ec_url, "Content-Length", len);
+
+   ecore_con_url_post(ec_url, fields_list, len, NULL);
    return EINA_TRUE;
 }
 
@@ -358,7 +410,11 @@ e_modapi_init(E_Module *m)
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
 
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _session_id_get_cb, NULL);
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_DATA, _torrents_data_get_cb, NULL);
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _torrents_status_get_cb, NULL);
    ecore_timer_add(5.0, _session_id_poller_cb, NULL);
+   ecore_timer_add(5.0, _torrents_poller_cb, NULL);
    _session_id_poller_cb(NULL);
    return m;
 }
