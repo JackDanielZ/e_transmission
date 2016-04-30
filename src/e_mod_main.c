@@ -5,24 +5,32 @@
 
 static void *_url_session_id_data_test = (void *)0;
 static void *_url_torrents_data_test = (void *)1;
-typedef struct _Instance Instance;
 
 static char but1_str[1000000] = "";
 static char but2_str[1000000] = "";
 
 static char *session_id = NULL;
 
-struct _Instance
+typedef struct
+{
+   const char *name;
+   Eo *name_label;
+} Item_Desc;
+
+typedef struct
 {
    E_Gadcon_Client *gcc;
    Ecore_Timer *timer;
    Config_Item *ci;
    E_Gadcon_Popup *popup;
    Evas_Object *o_icon;
-};
+   Eo *items_box;
+   Eina_List *items_list;
+} Instance;
 
 static E_Config_DD *conf_edd = NULL;
 static E_Config_DD *conf_item_edd = NULL;
+static Instance *last_inst = NULL;
 
 Config *cpu_conf = NULL;
 
@@ -91,6 +99,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              evas_object_show(button);
 
              evas_object_show(items_box);
+             eo_wref_add(items_box, &inst->items_box);
 
              e_gadcon_popup_content_set(inst->popup, items_box);
              e_comp_object_util_autoclose(inst->popup->comp_object,
@@ -175,6 +184,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
    gcc->data = inst;
    inst->gcc = gcc;
+   last_inst = inst;
 
    cpu_conf->instances = eina_list_append(cpu_conf->instances, inst);
 
@@ -250,6 +260,110 @@ _cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
 }
 #endif
 
+typedef struct
+{
+   const char *buffer;
+   const char *current;
+   unsigned int line_no;
+   unsigned int offset;
+} Lexer;
+
+static void
+_lexer_reset(Lexer *l)
+{
+   l->current = l->buffer;
+   l->line_no = l->offset = 0;
+}
+
+static void
+_ws_skip(Lexer *l)
+{
+   /*
+    * Skip spaces and \n
+    * For \n, inc line_no and reset offset
+    * otherwise inc offset
+    */
+   do
+     {
+        char c = *(l->current);
+        switch (c)
+          {
+           case ' ':
+              l->offset++;
+              break;
+           case '\n':
+              l->line_no++;
+              l->offset = 0;
+              break;
+           default:
+              return;
+          }
+        l->current++;
+     }
+   while (1);
+}
+
+static Eina_Bool
+_is_next_token(Lexer *l, const char *token)
+{
+   _ws_skip(l);
+   if (!strncmp(l->current, token, strlen(token)))
+     {
+        l->current += strlen(token);
+        l->offset += strlen(token);
+        return EINA_TRUE;
+     }
+   return EINA_FALSE;
+}
+
+static char *
+_next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
+{
+   if (!special) special = "";
+   _ws_skip(l);
+   const char *str = l->current;
+   while (*str &&
+         ((*str >= 'a' && *str <= 'z') ||
+          (*str >= 'A' && *str <= 'Z') ||
+          (*str >= '0' && *str <= '9') ||
+          !(!!special_allowed ^ !!strchr(special, *str)) ||
+          *str == '_')) str++;
+   if (str == l->current) return NULL;
+   int size = str - l->current;
+   char *word = malloc(size + 1);
+   memcpy(word, l->current, size);
+   word[size] = '\0';
+   l->current = str;
+   l->offset += size;
+   return word;
+}
+
+static int
+_next_number(Lexer *l)
+{
+   _ws_skip(l);
+   const char *str = l->current;
+   while (*str && (*str >= '0' && *str <= '9')) str++;
+   if (str == l->current) return -1;
+   int size = str - l->current;
+   char *n_str = alloca(size + 1);
+   memcpy(n_str, l->current, size);
+   n_str[size] = '\0';
+   l->current = str;
+   l->offset += size;
+   return atoi(n_str);
+}
+
+static Eina_Bool
+_jump_at(Lexer *l, const char *token, Eina_Bool over)
+{
+   char *found = strstr(l->current, token);
+   if (!found) return EINA_FALSE;
+   l->current = over ? found + strlen(token) : found;
+   l->offset = l->current - l->buffer;
+   return EINA_TRUE;
+}
+
 EAPI E_Module_Api e_modapi =
 {
    E_MODULE_API_VERSION, "Transmission"
@@ -293,8 +407,8 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
                          }
                     }
                }
-             sprintf(but1_str, "%s", session_id);
           }
+        sprintf(but1_str, "ZZZ%sZZZ", session_id);
      }
    else
      {
@@ -320,9 +434,91 @@ _session_id_poller_cb(void *data EINA_UNUSED)
 static char *_torrents_data_buf = NULL;
 static int _torrents_data_buf_len = 0, _torrents_data_len = 0;
 
+static Item_Desc *
+_item_find_by_name(const Eina_List *lst, const char *name)
+{
+   const Eina_List *itr;
+   Item_Desc *d;
+   EINA_LIST_FOREACH(lst, itr, d)
+     {
+        if (!strcmp(d->name, name)) return d;
+     }
+   return NULL;
+}
+
+static Eina_Bool
+_json_data_parse(Instance *inst)
+{
+   Lexer l;
+   l.buffer = _torrents_data_buf;
+   _lexer_reset(&l);
+   if (!_is_next_token(&l, "{")) return EINA_FALSE;
+   if (_is_next_token(&l, "\"arguments\":{"))
+     {
+        if (_is_next_token(&l, "\"torrents\":["))
+          {
+             while (!_is_next_token(&l, "]"))
+               {
+                  char *name = NULL;
+                  int leftuntildone = 0;
+                  if (!_is_next_token(&l, "{")) return EINA_FALSE;
+                  while (!_is_next_token(&l, "}"))
+                    {
+                       if (_is_next_token(&l, "\"name\":\""))
+                         {
+                            name = _next_word(&l, ".[]_- ", EINA_TRUE);
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else if (_is_next_token(&l, "\"leftUntilDone\":"))
+                         {
+                            leftuntildone = _next_number(&l);
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else _jump_at(&l, "}", EINA_FALSE);
+                    }
+                  if (name)
+                    {
+                       Item_Desc *d = _item_find_by_name(inst->items_list, name);
+                       if (!d)
+                         {
+                            d = E_NEW(Item_Desc, 1);
+                            inst->items_list = eina_list_append(inst->items_list, d);
+                            d->name = eina_stringshare_add(name);
+                         }
+                       free(name);
+                    }
+                  _is_next_token(&l, ",");
+               }
+          }
+     }
+   return EINA_TRUE;
+}
+
+static void
+_box_update(Instance *inst)
+{
+   Eina_List *itr;
+   Item_Desc *d;
+   EINA_LIST_FOREACH(inst->items_list, itr, d)
+     {
+        if (!d->name_label)
+          {
+             Eo *label = elm_label_add(inst->items_box);
+             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+             elm_object_text_set(label, d->name);
+             elm_box_pack_end(inst->items_box, label);
+             evas_object_show(label);
+             eo_wref_add(label, &d->name_label);
+          }
+     }
+}
+
 static Eina_Bool
 _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
+   if (!last_inst) return EINA_TRUE;
+   Instance *inst = last_inst;
    Ecore_Con_Event_Url_Data *url_data = event_info;
    void **test = ecore_con_url_data_get(url_data->url_con);
    if (!test || *test != _url_torrents_data_test) return EINA_TRUE;
@@ -334,7 +530,8 @@ _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_
    memcpy(_torrents_data_buf + _torrents_data_len, url_data->data, url_data->size);
    _torrents_data_len += url_data->size;
    _torrents_data_buf[_torrents_data_len] = '\0';
-   sprintf(but2_str, "%s", _torrents_data_buf);
+   _json_data_parse(inst);
+   _box_update(inst);
    return EINA_FALSE;
 }
 
@@ -345,7 +542,6 @@ _torrents_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *even
 
    if (url_complete->status && _torrents_data_len)
      {
-        sprintf(but2_str, "%s", _torrents_data_buf);
      }
    _torrents_data_len = 0;
    return EINA_FALSE;
@@ -354,7 +550,7 @@ _torrents_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *even
 static Eina_Bool
 _torrents_poller_cb(void *data EINA_UNUSED)
 {
-   const char *fields_list = "{\"arguments\":{\"fields\":[\"leftUntilDone\", \"name\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
    int len = strlen(fields_list);
    if (!session_id) return EINA_TRUE;
    Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
