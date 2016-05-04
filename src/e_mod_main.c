@@ -6,11 +6,6 @@
 static void *_url_session_id_data_test = (void *)0;
 static void *_url_torrents_data_test = (void *)1;
 
-static char but1_str[1000000] = "";
-static char but2_str[1000000] = "";
-
-static char *session_id = NULL;
-
 typedef struct
 {
    const char *name;
@@ -26,11 +21,15 @@ typedef struct
    Evas_Object *o_icon;
    Eo *items_box;
    Eina_List *items_list;
+   char but1_str[1000000]; // TEMP
+   char but2_str[1000000]; // TEMP
+   char *session_id;
 } Instance;
 
 static E_Config_DD *conf_edd = NULL;
 static E_Config_DD *conf_item_edd = NULL;
-static Instance *last_inst = NULL;
+
+static Eina_List *instances = NULL;
 
 Config *cpu_conf = NULL;
 
@@ -87,14 +86,14 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, but1_str);
+             elm_object_text_set(button, inst->but1_str);
              elm_box_pack_end(items_box, button);
              evas_object_show(button);
 
              button = elm_button_add(items_box);
              evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, but2_str);
+             elm_object_text_set(button, inst->but2_str);
              elm_box_pack_end(items_box, button);
              evas_object_show(button);
 
@@ -184,14 +183,11 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
    gcc->data = inst;
    inst->gcc = gcc;
-   last_inst = inst;
-
-   cpu_conf->instances = eina_list_append(cpu_conf->instances, inst);
+   instances = eina_list_append(instances, inst);
 
    evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
 				  _button_cb_mouse_down, inst);
 
-//   inst->timer = ecore_timer_add(inst->ci->interval, _set_cpu_load, inst);
    return gcc;
 }
 
@@ -384,22 +380,24 @@ static Eina_Bool
 _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
-   void **test = ecore_con_url_data_get(url_complete->url_con);
-   if (!test || *test != _url_session_id_data_test) return EINA_TRUE;
+   Ecore_Con_Url *ec_url = url_complete->url_con;
+   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   void **test = ecore_con_url_data_get(ec_url);
+   if (!inst || !test || *test != _url_session_id_data_test) return EINA_TRUE;
 
    if (url_complete->status)
      {
-        if (!session_id)
+        if (!inst->session_id)
           {
-             const Eina_List *hdrs = ecore_con_url_response_headers_get(url_complete->url_con), *itr;
+             const Eina_List *hdrs = ecore_con_url_response_headers_get(ec_url), *itr;
              char *hdr;
              EINA_LIST_FOREACH(hdrs, itr, hdr)
                {
                   if (strstr(hdr, "X-Transmission-Session-Id"))
                     {
                        char *tmp;
-                       session_id = strdup(hdr + 27);
-                       tmp = session_id;
+                       inst->session_id = strdup(hdr + 27);
+                       tmp = inst->session_id;
                        while (*tmp)
                          {
                             if (*tmp == 0x0D) *tmp = '\0';
@@ -408,13 +406,13 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
                     }
                }
           }
-        sprintf(but1_str, "ZZZ%sZZZ", session_id);
+        sprintf(inst->but1_str, "ZZZ%sZZZ", inst->session_id);
      }
    else
      {
-        sprintf(but1_str, "Error %d", url_complete->status);
-        free(session_id);
-        session_id = NULL;
+        sprintf(inst->but1_str, "Error %d", url_complete->status);
+        free(inst->session_id);
+        inst->session_id = NULL;
      }
 
    return EINA_FALSE;
@@ -423,11 +421,17 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
 static Eina_Bool
 _session_id_poller_cb(void *data EINA_UNUSED)
 {
-   Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
-   if (!ec_url) return EINA_TRUE;
-   ecore_con_url_proxy_set(ec_url, NULL);
-   ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
-   ecore_con_url_get(ec_url);
+   Eina_List *itr;
+   Instance *inst;
+   EINA_LIST_FOREACH(instances, itr, inst)
+     {
+        Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
+        if (!ec_url) return EINA_TRUE;
+        ecore_con_url_proxy_set(ec_url, NULL);
+        ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
+        eo_key_data_set(ec_url, "Transmission_Instance", inst);
+        ecore_con_url_get(ec_url);
+     }
    return EINA_TRUE;
 }
 
@@ -517,11 +521,11 @@ _box_update(Instance *inst)
 static Eina_Bool
 _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
-   if (!last_inst) return EINA_TRUE;
-   Instance *inst = last_inst;
    Ecore_Con_Event_Url_Data *url_data = event_info;
-   void **test = ecore_con_url_data_get(url_data->url_con);
-   if (!test || *test != _url_torrents_data_test) return EINA_TRUE;
+   Ecore_Con_Url *ec_url = url_data->url_con;
+   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   void **test = ecore_con_url_data_get(ec_url);
+   if (!inst || !test || *test != _url_torrents_data_test) return EINA_TRUE;
    if (url_data->size > (_torrents_data_buf_len - _torrents_data_len))
      {
         _torrents_data_buf_len = _torrents_data_len + url_data->size;
@@ -550,18 +554,24 @@ _torrents_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *even
 static Eina_Bool
 _torrents_poller_cb(void *data EINA_UNUSED)
 {
+   Eina_List *itr;
+   Instance *inst;
    const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
    int len = strlen(fields_list);
-   if (!session_id) return EINA_TRUE;
-   Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
-   if (!ec_url) return EINA_TRUE;
-   ecore_con_url_proxy_set(ec_url, NULL);
-   ecore_con_url_data_set(ec_url, &_url_torrents_data_test);
+   EINA_LIST_FOREACH(instances, itr, inst)
+     {
+        if (!inst->session_id) return EINA_TRUE;
+        Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
+        if (!ec_url) return EINA_TRUE;
+        ecore_con_url_proxy_set(ec_url, NULL);
+        ecore_con_url_data_set(ec_url, &_url_torrents_data_test);
+        eo_key_data_set(ec_url, "Transmission_Instance", inst);
 
-   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", session_id);
-   //ecore_con_url_additional_header_add(ec_url, "Content-Length", len);
+        ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
+        //ecore_con_url_additional_header_add(ec_url, "Content-Length", len);
 
-   ecore_con_url_post(ec_url, fields_list, len, NULL);
+        ecore_con_url_post(ec_url, fields_list, len, NULL);
+     }
    return EINA_TRUE;
 }
 
