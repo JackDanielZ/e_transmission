@@ -3,8 +3,19 @@
 #include <Ecore_Con.h>
 #include "e_mod_main.h"
 
+#define IP_ADDR "127.0.0.1"
+
+static const char *baseUrl = "http://%s:9091/transmission/rpc";
 static void *_url_session_id_data_test = (void *)0;
 static void *_url_torrents_data_test = (void *)1;
+
+typedef struct
+{
+   const char *buffer;
+   const char *current;
+   unsigned int line_no;
+   unsigned int offset;
+} Lexer;
 
 typedef struct
 {
@@ -24,6 +35,9 @@ typedef struct
    char but1_str[1000000]; // TEMP
    char but2_str[1000000]; // TEMP
    char *session_id;
+   char *torrents_data_buf;
+   int torrents_data_buf_len;
+   int torrents_data_len;
 } Instance;
 
 static E_Config_DD *conf_edd = NULL;
@@ -222,7 +236,7 @@ _gc_shutdown(E_Gadcon_Client *gcc)
    if (inst->timer) ecore_timer_del(inst->timer);
    if (inst->o_icon) evas_object_del(inst->o_icon);
 
-   cpu_conf->instances = eina_list_remove(cpu_conf->instances, inst);
+   instances = eina_list_remove(instances, inst);
    E_FREE(inst);
 }
 
@@ -276,14 +290,6 @@ _cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
    e_config_save_queue();
 }
 #endif
-
-typedef struct
-{
-   const char *buffer;
-   const char *current;
-   unsigned int line_no;
-   unsigned int offset;
-} Lexer;
 
 static void
 _lexer_reset(Lexer *l)
@@ -395,8 +401,6 @@ static const E_Gadcon_Client_Class _gc_class =
    E_GADCON_CLIENT_STYLE_PLAIN
 };
 
-static const char *baseUrl = "http://127.0.0.1:9091/transmission/rpc";
-
 static Eina_Bool
 _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
@@ -446,7 +450,9 @@ _session_id_poller_cb(void *data EINA_UNUSED)
    Instance *inst;
    EINA_LIST_FOREACH(instances, itr, inst)
      {
-        Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
+        char url[1024];
+        sprintf(url, baseUrl, IP_ADDR);
+        Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) return EINA_TRUE;
         ecore_con_url_proxy_set(ec_url, NULL);
         ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
@@ -455,9 +461,6 @@ _session_id_poller_cb(void *data EINA_UNUSED)
      }
    return EINA_TRUE;
 }
-
-static char *_torrents_data_buf = NULL;
-static int _torrents_data_buf_len = 0, _torrents_data_len = 0;
 
 static Item_Desc *
 _item_find_by_name(const Eina_List *lst, const char *name)
@@ -475,7 +478,7 @@ static Eina_Bool
 _json_data_parse(Instance *inst)
 {
    Lexer l;
-   l.buffer = _torrents_data_buf;
+   l.buffer = inst->torrents_data_buf;
    _lexer_reset(&l);
    if (!_is_next_token(&l, "{")) return EINA_FALSE;
    if (_is_next_token(&l, "\"arguments\":{"))
@@ -527,28 +530,37 @@ _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_
    Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
    if (!inst || !test || *test != _url_torrents_data_test) return EINA_TRUE;
-   if (url_data->size > (_torrents_data_buf_len - _torrents_data_len))
+   if (url_data->size > (inst->torrents_data_buf_len - inst->torrents_data_len))
      {
-        _torrents_data_buf_len = _torrents_data_len + url_data->size;
-        _torrents_data_buf = realloc(_torrents_data_buf, _torrents_data_buf_len + 1);
+        inst->torrents_data_buf_len = inst->torrents_data_len + url_data->size;
+        inst->torrents_data_buf = realloc(inst->torrents_data_buf,
+              inst->torrents_data_buf_len + 1);
      }
-   memcpy(_torrents_data_buf + _torrents_data_len, url_data->data, url_data->size);
-   _torrents_data_len += url_data->size;
-   _torrents_data_buf[_torrents_data_len] = '\0';
-   _json_data_parse(inst);
-   _box_update(inst);
+   memcpy(inst->torrents_data_buf + inst->torrents_data_len,
+         url_data->data, url_data->size);
+   inst->torrents_data_len += url_data->size;
+   inst->torrents_data_buf[inst->torrents_data_len] = '\0';
    return EINA_FALSE;
 }
 
 static Eina_Bool
-_torrents_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+_torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
 
-   if (url_complete->status && _torrents_data_len)
+   if (url_complete->status)
      {
+        Ecore_Con_Url *ec_url = url_complete->url_con;
+        Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+        void **test = ecore_con_url_data_get(ec_url);
+        if (!inst || !inst->torrents_data_len ||
+              !test || *test != _url_torrents_data_test) return EINA_TRUE;
+          {
+             _json_data_parse(inst);
+             _box_update(inst);
+          }
+        inst->torrents_data_len = 0;
      }
-   _torrents_data_len = 0;
    return EINA_FALSE;
 }
 
@@ -561,9 +573,11 @@ _torrents_poller_cb(void *data EINA_UNUSED)
    int len = strlen(fields_list);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
-        if (!inst->session_id) return EINA_TRUE;
-        Ecore_Con_Url *ec_url = ecore_con_url_new(baseUrl);
-        if (!ec_url) return EINA_TRUE;
+        char url[1024];
+        if (!inst->session_id) continue;
+        sprintf(url, baseUrl, IP_ADDR);
+        Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+        if (!ec_url) continue;
         ecore_con_url_proxy_set(ec_url, NULL);
         ecore_con_url_data_set(ec_url, &_url_torrents_data_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
@@ -619,9 +633,9 @@ e_modapi_init(E_Module *m)
 
    ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _session_id_get_cb, NULL);
    ecore_event_handler_add(ECORE_CON_EVENT_URL_DATA, _torrents_data_get_cb, NULL);
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _torrents_status_get_cb, NULL);
-   ecore_timer_add(5.0, _session_id_poller_cb, NULL);
-   ecore_timer_add(5.0, _torrents_poller_cb, NULL);
+   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _torrents_data_status_get_cb, NULL);
+   ecore_timer_add(1.0, _session_id_poller_cb, NULL);
+   ecore_timer_add(1.0, _torrents_poller_cb, NULL);
    _session_id_poller_cb(NULL);
    return m;
 }
