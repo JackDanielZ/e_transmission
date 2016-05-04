@@ -45,6 +45,26 @@ _menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
 }
 
 static void
+_box_update(Instance *inst)
+{
+   Eina_List *itr;
+   Item_Desc *d;
+   EINA_LIST_FOREACH(inst->items_list, itr, d)
+     {
+        if (!d->name_label)
+          {
+             Eo *label = elm_label_add(inst->items_box);
+             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+             elm_object_text_set(label, d->name);
+             elm_box_pack_end(inst->items_box, label);
+             evas_object_show(label);
+             eo_wref_add(label, &d->name_label);
+          }
+     }
+}
+
+static void
 _popup_del(Instance *inst)
 {
    E_FREE_FUNC(inst->popup, e_object_del);
@@ -99,6 +119,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 
              evas_object_show(items_box);
              eo_wref_add(items_box, &inst->items_box);
+             _box_update(inst);
 
              e_gadcon_popup_content_set(inst->popup, items_box);
              e_comp_object_util_autoclose(inst->popup->comp_object,
@@ -496,26 +517,6 @@ _json_data_parse(Instance *inst)
           }
      }
    return EINA_TRUE;
-}
-
-static void
-_box_update(Instance *inst)
-{
-   Eina_List *itr;
-   Item_Desc *d;
-   EINA_LIST_FOREACH(inst->items_list, itr, d)
-     {
-        if (!d->name_label)
-          {
-             Eo *label = elm_label_add(inst->items_box);
-             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(label, d->name);
-             elm_box_pack_end(inst->items_box, label);
-             evas_object_show(label);
-             eo_wref_add(label, &d->name_label);
-          }
-     }
 }
 
 static Eina_Bool
