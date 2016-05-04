@@ -13,8 +13,6 @@ typedef struct
 {
    const char *buffer;
    const char *current;
-   unsigned int line_no;
-   unsigned int offset;
 } Lexer;
 
 typedef struct
@@ -295,7 +293,6 @@ static void
 _lexer_reset(Lexer *l)
 {
    l->current = l->buffer;
-   l->line_no = l->offset = 0;
 }
 
 static void
@@ -303,20 +300,13 @@ _ws_skip(Lexer *l)
 {
    /*
     * Skip spaces and \n
-    * For \n, inc line_no and reset offset
-    * otherwise inc offset
     */
    do
      {
         char c = *(l->current);
         switch (c)
           {
-           case ' ':
-              l->offset++;
-              break;
-           case '\n':
-              l->line_no++;
-              l->offset = 0;
+           case ' ': case '\n':
               break;
            default:
               return;
@@ -333,7 +323,6 @@ _is_next_token(Lexer *l, const char *token)
    if (!strncmp(l->current, token, strlen(token)))
      {
         l->current += strlen(token);
-        l->offset += strlen(token);
         return EINA_TRUE;
      }
    return EINA_FALSE;
@@ -357,7 +346,6 @@ _next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
    memcpy(word, l->current, size);
    word[size] = '\0';
    l->current = str;
-   l->offset += size;
    return word;
 }
 
@@ -373,7 +361,6 @@ _next_number(Lexer *l)
    memcpy(n_str, l->current, size);
    n_str[size] = '\0';
    l->current = str;
-   l->offset += size;
    return atoi(n_str);
 }
 
@@ -383,7 +370,6 @@ _jump_at(Lexer *l, const char *token, Eina_Bool over)
    char *found = strstr(l->current, token);
    if (!found) return EINA_FALSE;
    l->current = over ? found + strlen(token) : found;
-   l->offset = l->current - l->buffer;
    return EINA_TRUE;
 }
 
