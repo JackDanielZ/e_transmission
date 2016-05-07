@@ -18,7 +18,11 @@ typedef struct
 typedef struct
 {
    const char *name;
+   unsigned int size;
+
+   Eo *item_box;
    Eo *name_label;
+   Eo *size_label;
 } Item_Desc;
 
 typedef struct
@@ -56,6 +60,22 @@ _menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
    cpu_conf->menu_interval = NULL;
 }
 
+static char *
+_size_to_string(double size, const char *suffix)
+{
+   char *str = malloc(10 + (suffix ? strlen(suffix) : 0));
+   const char* units[] = {"B", "KB", "MB", "GB", NULL};
+   const char* formats[] = {"   %5.0f%s%s", "   %5.1f%s%s", "   %5.1f%s%s", "   %5.1f%s%s", NULL};
+   unsigned int idx = 0;
+   while (size >= 1000)
+     {
+        size /= 1000;
+        idx++;
+     }
+   sprintf(str, formats[idx], size, units[idx], suffix ? suffix : "");
+   return str;
+}
+
 static void
 _box_update(Instance *inst)
 {
@@ -63,15 +83,38 @@ _box_update(Instance *inst)
    Item_Desc *d;
    EINA_LIST_FOREACH(inst->items_list, itr, d)
      {
+        if (!d->item_box)
+          {
+             Eo *item_box = elm_box_add(inst->items_box);
+             elm_box_horizontal_set(item_box, EINA_TRUE);
+             elm_box_homogeneous_set(item_box, EINA_TRUE);
+             evas_object_size_hint_align_set(item_box, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(item_box, EVAS_HINT_EXPAND, 0.0);
+             elm_box_pack_end(inst->items_box, item_box);
+             evas_object_show(item_box);
+             eo_wref_add(item_box, &d->item_box);
+          }
         if (!d->name_label)
           {
-             Eo *label = elm_label_add(inst->items_box);
+             Eo *label = elm_label_add(d->item_box);
              evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
              elm_object_text_set(label, d->name);
-             elm_box_pack_end(inst->items_box, label);
+             elm_box_pack_end(d->item_box, label);
              evas_object_show(label);
              eo_wref_add(label, &d->name_label);
+          }
+        if (!d->size_label)
+          {
+             Eo *label = elm_label_add(d->item_box);
+             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+             char *size_str = _size_to_string(d->size, NULL);
+             elm_object_text_set(label, size_str);
+             free(size_str);
+             elm_box_pack_end(d->item_box, label);
+             evas_object_show(label);
+             eo_wref_add(label, &d->size_label);
           }
      }
 }
@@ -475,6 +518,7 @@ _json_data_parse(Instance *inst)
                {
                   char *name = NULL;
                   int leftuntildone = 0;
+                  unsigned int size = 0;
                   if (!_is_next_token(&l, "{")) return EINA_FALSE;
                   while (!_is_next_token(&l, "}"))
                     {
@@ -488,6 +532,19 @@ _json_data_parse(Instance *inst)
                             leftuntildone = _next_number(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
+                       else if (_is_next_token(&l, "\"rateDownload\":"))
+                         {
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else if (_is_next_token(&l, "\"rateUpload\":"))
+                         {
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else if (_is_next_token(&l, "\"sizeWhenDone\":"))
+                         {
+                            size = _next_number(&l);
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
                        else _jump_at(&l, "}", EINA_FALSE);
                     }
                   if (name)
@@ -498,6 +555,7 @@ _json_data_parse(Instance *inst)
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
                             d->name = eina_stringshare_add(name);
+                            d->size = size;
                          }
                        free(name);
                     }
