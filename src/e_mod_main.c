@@ -20,7 +20,7 @@ typedef struct
    const char *name;
    unsigned int size;
 
-   Eo *item_box;
+   int table_idx;
    Eo *name_label;
    Eo *size_label;
 } Item_Desc;
@@ -32,7 +32,7 @@ typedef struct
    Config_Item *ci;
    E_Gadcon_Popup *popup;
    Evas_Object *o_icon;
-   Eo *items_box;
+   Eo *main_box, *items_table;
    Eina_List *items_list;
    char *session_id;
    char *torrents_data_buf;
@@ -63,7 +63,7 @@ _size_to_string(double size, const char *suffix)
 {
    char *str = malloc(10 + (suffix ? strlen(suffix) : 0));
    const char* units[] = {"B", "KB", "MB", "GB", NULL};
-   const char* formats[] = {"   %5.0f%s%s", "   %5.1f%s%s", "   %5.1f%s%s", "   %5.1f%s%s", NULL};
+   const char* formats[] = {"%5.0f%s%s", "%5.1f%s%s", "%5.1f%s%s", "%5.1f%s%s", NULL};
    unsigned int idx = 0;
    while (size >= 1000)
      {
@@ -74,43 +74,49 @@ _size_to_string(double size, const char *suffix)
    return str;
 }
 
+enum
+{
+   NAME_COL = 0,
+   SIZE_COL = 1
+};
+
 static void
 _box_update(Instance *inst)
 {
-   Eina_List *itr;
-   Item_Desc *d;
+   Eina_List *itr, *itr2;
+   Item_Desc *d, *d2;
    EINA_LIST_FOREACH(inst->items_list, itr, d)
      {
-        if (!d->item_box)
+        if (d->table_idx == -1)
           {
-             Eo *item_box = elm_box_add(inst->items_box);
-             elm_box_horizontal_set(item_box, EINA_TRUE);
-             elm_box_homogeneous_set(item_box, EINA_TRUE);
-             evas_object_size_hint_align_set(item_box, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(item_box, EVAS_HINT_EXPAND, 0.0);
-             elm_box_pack_end(inst->items_box, item_box);
-             evas_object_show(item_box);
-             eo_wref_add(item_box, &d->item_box);
+             Eina_Bool found = EINA_TRUE;
+             while (found)
+               {
+                  found = EINA_FALSE;
+                  d->table_idx++;
+                  EINA_LIST_FOREACH(inst->items_list, itr2, d2)
+                     if (d != d2 && d2->table_idx == d->table_idx) found = EINA_TRUE;
+               }
           }
         if (!d->name_label)
           {
-             Eo *label = elm_label_add(d->item_box);
+             Eo *label = elm_label_add(inst->items_table);
              evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
              elm_object_text_set(label, d->name);
-             elm_box_pack_end(d->item_box, label);
+             elm_table_pack(inst->items_table, label, NAME_COL, d->table_idx, 1, 1);
              evas_object_show(label);
              eo_wref_add(label, &d->name_label);
           }
         if (!d->size_label)
           {
-             Eo *label = elm_label_add(d->item_box);
+             Eo *label = elm_label_add(inst->items_table);
              evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
              char *size_str = _size_to_string(d->size, NULL);
              elm_object_text_set(label, size_str);
              free(size_str);
-             elm_box_pack_end(d->item_box, label);
+             elm_table_pack(inst->items_table, label, SIZE_COL, d->table_idx, 1, 1);
              evas_object_show(label);
              eo_wref_add(label, &d->size_label);
           }
@@ -149,18 +155,26 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      {
         if (!inst->popup)
           {
-             Evas_Object *items_box;
+             Evas_Object *o;
              inst->popup = e_gadcon_popup_new(inst->gcc, 0);
 
-             items_box = elm_box_add(e_comp->elm);
-             evas_object_size_hint_align_set(items_box, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(items_box, EVAS_HINT_EXPAND, 0.0);
+             o = elm_box_add(e_comp->elm);
+             evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
+             evas_object_show(o);
+             eo_wref_add(o, &inst->main_box);
 
-             evas_object_show(items_box);
-             eo_wref_add(items_box, &inst->items_box);
+             o = elm_table_add(inst->main_box);
+             evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
+             elm_table_padding_set(o, 20, 0);
+             elm_box_pack_end(inst->main_box, o);
+             evas_object_show(o);
+             eo_wref_add(o, &inst->items_table);
+
              _box_update(inst);
 
-             e_gadcon_popup_content_set(inst->popup, items_box);
+             e_gadcon_popup_content_set(inst->popup, inst->main_box);
              e_comp_object_util_autoclose(inst->popup->comp_object,
                    _popup_comp_del_cb, NULL, inst);
              e_gadcon_popup_show(inst->popup);
@@ -536,6 +550,7 @@ _json_data_parse(Instance *inst)
                          {
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
+                            d->table_idx = -1;
                             d->name = eina_stringshare_add(name);
                             d->size = size;
                          }
