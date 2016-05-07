@@ -34,8 +34,6 @@ typedef struct
    Evas_Object *o_icon;
    Eo *items_box;
    Eina_List *items_list;
-   char but1_str[1000000]; // TEMP
-   char but2_str[1000000]; // TEMP
    char *session_id;
    char *torrents_data_buf;
    int torrents_data_buf_len;
@@ -151,26 +149,12 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      {
         if (!inst->popup)
           {
-             Evas_Object *items_box, *button;
+             Evas_Object *items_box;
              inst->popup = e_gadcon_popup_new(inst->gcc, 0);
 
              items_box = elm_box_add(e_comp->elm);
              evas_object_size_hint_align_set(items_box, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(items_box, EVAS_HINT_EXPAND, 0.0);
-
-             button = elm_button_add(items_box);
-             evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, inst->but1_str);
-             elm_box_pack_end(items_box, button);
-             evas_object_show(button);
-
-             button = elm_button_add(items_box);
-             evas_object_size_hint_align_set(button, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(button, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(button, inst->but2_str);
-             elm_box_pack_end(items_box, button);
-             evas_object_show(button);
 
              evas_object_show(items_box);
              eo_wref_add(items_box, &inst->items_box);
@@ -460,11 +444,9 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
                     }
                }
           }
-        sprintf(inst->but1_str, "ZZZ%sZZZ", inst->session_id);
      }
    else
      {
-        sprintf(inst->but1_str, "Error %d", url_complete->status);
         free(inst->session_id);
         inst->session_id = NULL;
      }
