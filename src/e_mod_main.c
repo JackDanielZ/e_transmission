@@ -191,6 +191,19 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              evas_object_show(o);
              eo_wref_add(o, &inst->items_table);
 
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Torrent name", NULL),
+                   NAME_COL, 0, 1, 1);
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Size", NULL),
+                   SIZE_COL, 0, 1, 1);
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Download", NULL),
+                   DOWNRATE_COL, 0, 1, 1);
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Upload", NULL),
+                   UPRATE_COL, 0, 1, 1);
+
              _box_update(inst);
 
              e_gadcon_popup_content_set(inst->popup, inst->main_box);
