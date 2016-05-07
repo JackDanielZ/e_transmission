@@ -18,11 +18,12 @@ typedef struct
 typedef struct
 {
    const char *name;
-   unsigned int size;
+   unsigned int size, downrate, uprate;
 
    int table_idx;
    Eo *name_label;
    Eo *size_label;
+   Eo *downrate_label, *uprate_label;
 } Item_Desc;
 
 typedef struct
@@ -76,8 +77,10 @@ _size_to_string(double size, const char *suffix)
 
 enum
 {
-   NAME_COL = 0,
-   SIZE_COL = 1
+   NAME_COL,
+   SIZE_COL,
+   DOWNRATE_COL,
+   UPRATE_COL
 };
 
 static void
@@ -87,7 +90,7 @@ _box_update(Instance *inst)
    Item_Desc *d, *d2;
    EINA_LIST_FOREACH(inst->items_list, itr, d)
      {
-        if (d->table_idx == -1)
+        if (!d->table_idx)
           {
              Eina_Bool found = EINA_TRUE;
              while (found)
@@ -119,6 +122,30 @@ _box_update(Instance *inst)
              elm_table_pack(inst->items_table, label, SIZE_COL, d->table_idx, 1, 1);
              evas_object_show(label);
              eo_wref_add(label, &d->size_label);
+          }
+        if (!d->downrate_label)
+          {
+             Eo *label = elm_label_add(inst->items_table);
+             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+             char *str = _size_to_string(d->downrate, "/s");
+             elm_object_text_set(label, str);
+             free(str);
+             elm_table_pack(inst->items_table, label, DOWNRATE_COL, d->table_idx, 1, 1);
+             evas_object_show(label);
+             eo_wref_add(label, &d->downrate_label);
+          }
+        if (!d->uprate_label)
+          {
+             Eo *label = elm_label_add(inst->items_table);
+             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+             char *str = _size_to_string(d->uprate, "/s");
+             elm_object_text_set(label, str);
+             free(str);
+             elm_table_pack(inst->items_table, label, UPRATE_COL, d->table_idx, 1, 1);
+             evas_object_show(label);
+             eo_wref_add(label, &d->uprate_label);
           }
      }
 }
@@ -550,7 +577,6 @@ _json_data_parse(Instance *inst)
                          {
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
-                            d->table_idx = -1;
                             d->name = eina_stringshare_add(name);
                             d->size = size;
                          }
