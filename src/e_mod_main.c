@@ -83,6 +83,18 @@ enum
    UPRATE_COL
 };
 
+static Eo *
+_label_create(Eo *parent, const char *text, Eo **wref)
+{
+   Eo *label = elm_label_add(parent);
+   evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+   evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+   elm_object_text_set(label, text);
+   evas_object_show(label);
+   if (wref) eo_wref_add(label, wref);
+   return label;
+}
+
 static void
 _box_update(Instance *inst)
 {
@@ -103,49 +115,29 @@ _box_update(Instance *inst)
           }
         if (!d->name_label)
           {
-             Eo *label = elm_label_add(inst->items_table);
-             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
-             elm_object_text_set(label, d->name);
-             elm_table_pack(inst->items_table, label, NAME_COL, d->table_idx, 1, 1);
-             evas_object_show(label);
-             eo_wref_add(label, &d->name_label);
+             _label_create(inst->items_table, d->name, &d->name_label);
+             elm_table_pack(inst->items_table, d->name_label, NAME_COL, d->table_idx, 1, 1);
           }
         if (!d->size_label)
           {
-             Eo *label = elm_label_add(inst->items_table);
-             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
-             char *size_str = _size_to_string(d->size, NULL);
-             elm_object_text_set(label, size_str);
-             free(size_str);
-             elm_table_pack(inst->items_table, label, SIZE_COL, d->table_idx, 1, 1);
-             evas_object_show(label);
-             eo_wref_add(label, &d->size_label);
+             char *str = _size_to_string(d->size, NULL);
+             _label_create(inst->items_table, str, &d->size_label);
+             free(str);
+             elm_table_pack(inst->items_table, d->size_label, SIZE_COL, d->table_idx, 1, 1);
           }
         if (!d->downrate_label)
           {
-             Eo *label = elm_label_add(inst->items_table);
-             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
              char *str = _size_to_string(d->downrate, "/s");
-             elm_object_text_set(label, str);
+             _label_create(inst->items_table, str, &d->downrate_label);
              free(str);
-             elm_table_pack(inst->items_table, label, DOWNRATE_COL, d->table_idx, 1, 1);
-             evas_object_show(label);
-             eo_wref_add(label, &d->downrate_label);
+             elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
           }
         if (!d->uprate_label)
           {
-             Eo *label = elm_label_add(inst->items_table);
-             evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
              char *str = _size_to_string(d->uprate, "/s");
-             elm_object_text_set(label, str);
+             _label_create(inst->items_table, str, &d->uprate_label);
              free(str);
-             elm_table_pack(inst->items_table, label, UPRATE_COL, d->table_idx, 1, 1);
-             evas_object_show(label);
-             eo_wref_add(label, &d->uprate_label);
+             elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
           }
      }
 }
