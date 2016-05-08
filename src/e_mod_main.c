@@ -127,14 +127,14 @@ _box_update(Instance *inst)
           }
         if (!d->downrate_label)
           {
-             char *str = _size_to_string(d->downrate, "/s");
+             char *str = d->downrate ? _size_to_string(d->downrate, "/s") : strdup("---");
              _label_create(inst->items_table, str, &d->downrate_label);
              free(str);
              elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
           }
         if (!d->uprate_label)
           {
-             char *str = _size_to_string(d->uprate, "/s");
+             char *str = d->uprate ? _size_to_string(d->uprate, "/s") : strdup("---");
              _label_create(inst->items_table, str, &d->uprate_label);
              free(str);
              elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
