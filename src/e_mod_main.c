@@ -113,8 +113,8 @@ _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref)
         evas_object_show(bt);
         if (wref) eo_wref_add(bt, wref);
      }
-   if (text) elm_object_text_set(bt, text);
-   if (icon) elm_object_part_content_set(bt, "icon", icon);
+   elm_object_text_set(bt, text);
+   elm_object_part_content_set(bt, "icon", icon);
    return bt;
 }
 
@@ -135,6 +135,7 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
 static void
 _box_update(Instance *inst)
 {
+   char *str;
    Eina_List *itr, *itr2;
    Item_Desc *d, *d2;
    EINA_LIST_FOREACH(inst->items_list, itr, d)
@@ -150,39 +151,28 @@ _box_update(Instance *inst)
                      if (d != d2 && d2->table_idx == d->table_idx) found = EINA_TRUE;
                }
           }
-        if (!d->name_label)
-          {
-             _label_create(inst->items_table, d->name, &d->name_label);
-             elm_table_pack(inst->items_table, d->name_label, NAME_COL, d->table_idx, 1, 1);
-          }
-        if (!d->size_label)
-          {
-             char *str = _size_to_string(d->size, NULL);
-             _label_create(inst->items_table, str, &d->size_label);
-             free(str);
-             elm_table_pack(inst->items_table, d->size_label, SIZE_COL, d->table_idx, 1, 1);
-          }
-        if (!d->downrate_label)
-          {
-             char *str = d->downrate ? _size_to_string(d->downrate, "/s") : strdup("---");
-             _label_create(inst->items_table, str, &d->downrate_label);
-             free(str);
-             elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
-          }
-        if (!d->uprate_label)
-          {
-             char *str = d->uprate ? _size_to_string(d->uprate, "/s") : strdup("---");
-             _label_create(inst->items_table, str, &d->uprate_label);
-             free(str);
-             elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
-          }
-        if (!d->start_button)
-          {
-             _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
-             _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
-             _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button);
-             elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
-          }
+        _label_create(inst->items_table, d->name, &d->name_label);
+        elm_table_pack(inst->items_table, d->name_label, NAME_COL, d->table_idx, 1, 1);
+
+        str = _size_to_string(d->size, NULL);
+        _label_create(inst->items_table, str, &d->size_label);
+        free(str);
+        elm_table_pack(inst->items_table, d->size_label, SIZE_COL, d->table_idx, 1, 1);
+
+        str = d->downrate ? _size_to_string(d->downrate, "/s") : strdup("---");
+        _label_create(inst->items_table, str, &d->downrate_label);
+        free(str);
+        elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
+
+        str = d->uprate ? _size_to_string(d->uprate, "/s") : strdup("---");
+        _label_create(inst->items_table, str, &d->uprate_label);
+        free(str);
+        elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
+
+        _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
+        _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
+        _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button);
+        elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
      }
 }
 
@@ -639,12 +629,12 @@ _json_data_parse(Instance *inst)
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
                             d->id = id;
-                            d->downrate = downrate;
-                            d->uprate = uprate;
-                            d->status = status;
                             d->name = eina_stringshare_add(name);
-                            d->size = size;
                          }
+                       d->size = size;
+                       d->downrate = downrate;
+                       d->uprate = uprate;
+                       d->status = status;
                        free(name);
                     }
                   _is_next_token(&l, ",");
