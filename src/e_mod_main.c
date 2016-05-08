@@ -18,12 +18,13 @@ typedef struct
 typedef struct
 {
    const char *name;
-   unsigned int size, downrate, uprate, id;
+   unsigned int size, downrate, uprate, id, status;
 
    int table_idx;
    Eo *name_label;
    Eo *size_label;
    Eo *downrate_label, *uprate_label;
+   Eo *start_button, *start_icon, *pause_icon;
 } Item_Desc;
 
 typedef struct
@@ -80,7 +81,8 @@ enum
    NAME_COL,
    SIZE_COL,
    DOWNRATE_COL,
-   UPRATE_COL
+   UPRATE_COL,
+   PLAY_COL
 };
 
 static Eo *
@@ -93,6 +95,29 @@ _label_create(Eo *parent, const char *text, Eo **wref)
    evas_object_show(label);
    if (wref) eo_wref_add(label, wref);
    return label;
+}
+
+static Eo *
+_button_create(Eo *parent, const char *text, Eo *icon, Eo **wref)
+{
+   Eo *bt = elm_button_add(parent);
+   evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+   evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, 0.0);
+   if (text) elm_object_text_set(bt, text);
+   if (icon) elm_object_part_content_set(bt, "icon", icon);
+   evas_object_show(bt);
+   if (wref) eo_wref_add(bt, wref);
+   return bt;
+}
+
+static Eo *
+_icon_create(Eo *parent, const char *path, Eo **wref)
+{
+   Eo *ic = elm_icon_add(parent);
+   elm_icon_standard_set(ic, path);
+   evas_object_show(ic);
+   if (wref) eo_wref_add(ic, wref);
+   return ic;
 }
 
 static void
@@ -138,6 +163,13 @@ _box_update(Instance *inst)
              _label_create(inst->items_table, str, &d->uprate_label);
              free(str);
              elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
+          }
+        if (!d->start_button)
+          {
+             _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
+             _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
+             _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button);
+             elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
           }
      }
 }
@@ -545,7 +577,7 @@ _json_data_parse(Instance *inst)
              while (!_is_next_token(&l, "]"))
                {
                   char *name = NULL;
-                  int leftuntildone = 0, id = 0;
+                  int leftuntildone = 0, id = 0, status = 0, uprate = 0, downrate = 0;
                   unsigned int size = 0;
                   if (!_is_next_token(&l, "{")) return EINA_FALSE;
                   while (!_is_next_token(&l, "}"))
@@ -560,6 +592,11 @@ _json_data_parse(Instance *inst)
                             id = _next_number(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
+                       else if (_is_next_token(&l, "\"status\":"))
+                         {
+                            status = _next_number(&l);
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
                        else if (_is_next_token(&l, "\"leftUntilDone\":"))
                          {
                             leftuntildone = _next_number(&l);
@@ -567,10 +604,12 @@ _json_data_parse(Instance *inst)
                          }
                        else if (_is_next_token(&l, "\"rateDownload\":"))
                          {
+                            downrate = _next_number(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"rateUpload\":"))
                          {
+                            uprate = _next_number(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"sizeWhenDone\":"))
@@ -588,6 +627,9 @@ _json_data_parse(Instance *inst)
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
                             d->id = id;
+                            d->downrate = downrate;
+                            d->uprate = uprate;
+                            d->status = status;
                             d->name = eina_stringshare_add(name);
                             d->size = size;
                          }
@@ -647,7 +689,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
 {
    Eina_List *itr;
    Instance *inst;
-   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
    int len = strlen(fields_list);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
