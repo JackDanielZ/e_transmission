@@ -18,7 +18,7 @@ typedef struct
 typedef struct
 {
    const char *name;
-   unsigned int size, downrate, uprate;
+   unsigned int size, downrate, uprate, id;
 
    int table_idx;
    Eo *name_label;
@@ -545,7 +545,7 @@ _json_data_parse(Instance *inst)
              while (!_is_next_token(&l, "]"))
                {
                   char *name = NULL;
-                  int leftuntildone = 0;
+                  int leftuntildone = 0, id = 0;
                   unsigned int size = 0;
                   if (!_is_next_token(&l, "{")) return EINA_FALSE;
                   while (!_is_next_token(&l, "}"))
@@ -553,6 +553,11 @@ _json_data_parse(Instance *inst)
                        if (_is_next_token(&l, "\"name\":\""))
                          {
                             name = _next_word(&l, ".[]_- ", EINA_TRUE);
+                            _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else if (_is_next_token(&l, "\"id\":"))
+                         {
+                            id = _next_number(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"leftUntilDone\":"))
@@ -575,13 +580,14 @@ _json_data_parse(Instance *inst)
                          }
                        else _jump_at(&l, "}", EINA_FALSE);
                     }
-                  if (name)
+                  if (id)
                     {
                        Item_Desc *d = _item_find_by_name(inst->items_list, name);
                        if (!d)
                          {
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
+                            d->id = id;
                             d->name = eina_stringshare_add(name);
                             d->size = size;
                          }
@@ -641,7 +647,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
 {
    Eina_List *itr;
    Instance *inst;
-   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
    int len = strlen(fields_list);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
