@@ -88,35 +88,47 @@ enum
 static Eo *
 _label_create(Eo *parent, const char *text, Eo **wref)
 {
-   Eo *label = elm_label_add(parent);
-   evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
-   evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+   Eo *label = wref ? *wref : NULL;
+   if (!label)
+     {
+        label = elm_label_add(parent);
+        evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
+        evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
+        evas_object_show(label);
+        if (wref) eo_wref_add(label, wref);
+     }
    elm_object_text_set(label, text);
-   evas_object_show(label);
-   if (wref) eo_wref_add(label, wref);
    return label;
 }
 
 static Eo *
 _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref)
 {
-   Eo *bt = elm_button_add(parent);
-   evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
-   evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, 0.0);
+   Eo *bt = wref ? *wref : NULL;
+   if (!bt)
+     {
+        bt = elm_button_add(parent);
+        evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+        evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, 0.0);
+        evas_object_show(bt);
+        if (wref) eo_wref_add(bt, wref);
+     }
    if (text) elm_object_text_set(bt, text);
    if (icon) elm_object_part_content_set(bt, "icon", icon);
-   evas_object_show(bt);
-   if (wref) eo_wref_add(bt, wref);
    return bt;
 }
 
 static Eo *
 _icon_create(Eo *parent, const char *path, Eo **wref)
 {
-   Eo *ic = elm_icon_add(parent);
-   elm_icon_standard_set(ic, path);
-   evas_object_show(ic);
-   if (wref) eo_wref_add(ic, wref);
+   Eo *ic = wref ? *wref : NULL;
+   if (!ic)
+     {
+        ic = elm_icon_add(parent);
+        elm_icon_standard_set(ic, path);
+        evas_object_show(ic);
+        if (wref) eo_wref_add(ic, wref);
+     }
    return ic;
 }
 
