@@ -519,12 +519,29 @@ _next_double(Lexer *l)
    return atof(n_str);
 }
 
+#define JUMP_AT(l, ...) _jump_at(l, __VA_ARGS__, NULL)
+
 static Eina_Bool
-_jump_at(Lexer *l, const char *token, Eina_Bool over)
+_jump_at(Lexer *l, ...)
 {
-   char *found = strstr(l->current, token);
-   if (!found) return EINA_FALSE;
-   l->current = over ? found + strlen(token) : found;
+   const char *token;
+   Eina_Bool over;
+   char *min = NULL;
+   va_list args;
+   va_start(args, l);
+   do
+     {
+        token = va_arg(args, const char *);
+        over = va_arg(args, int);
+        if (token)
+          {
+             char *found = strstr(l->current, token);
+             if (found) found += (over ? strlen(token) : 0);
+             if (found) min = (!min || found < min ? found : min);
+          }
+     } while (token);
+   if (!min) return EINA_FALSE;
+   l->current = min;
    return EINA_TRUE;
 }
 
@@ -636,44 +653,47 @@ _json_data_parse(Instance *inst)
                        if (_is_next_token(&l, "\"name\":\""))
                          {
                             name = _next_word(&l, ".[]_- ", EINA_TRUE);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"id\":"))
                          {
                             id = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"status\":"))
                          {
                             status = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"leftUntilDone\":"))
                          {
                             leftuntildone = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"rateDownload\":"))
                          {
                             downrate = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"rateUpload\":"))
                          {
                             uprate = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"sizeWhenDone\":"))
                          {
                             size = _next_integer(&l);
-                            _jump_at(&l, ",", EINA_TRUE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"uploadRatio\":"))
                          {
                             ratio = _next_double(&l);
-                            _jump_at(&l, "}", EINA_FALSE);
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
-                       else _jump_at(&l, "}", EINA_FALSE);
+                       else
+                         {
+                            if (!JUMP_AT(&l, "}", EINA_FALSE)) return EINA_FALSE;
+                         }
                     }
                   if (id)
                     {
