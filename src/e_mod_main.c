@@ -35,13 +35,13 @@ typedef struct
    Instance *inst;
    const char *name;
    unsigned int size, downrate, uprate, id, status;
-   double done;
+   double done, ratio;
 
    int table_idx;
    Eo *name_label;
    Eo *size_label;
    Eo *done_label;
-   Eo *downrate_label, *uprate_label;
+   Eo *downrate_label, *uprate_label, *ratio_label;
    Eo *start_button, *start_icon, *pause_icon;
 } Item_Desc;
 
@@ -84,6 +84,7 @@ enum
    DONE_COL,
    DOWNRATE_COL,
    UPRATE_COL,
+   RATIO_COL,
    PLAY_COL
 };
 
@@ -191,6 +192,10 @@ _box_update(Instance *inst)
         _label_create(inst->items_table, d->uprate ? str : "---", &d->uprate_label);
         elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
 
+        sprintf(str, "%5.1f", d->ratio);
+        _label_create(inst->items_table, str, &d->ratio_label);
+        elm_table_pack(inst->items_table, d->ratio_label, RATIO_COL, d->table_idx, 1, 1);
+
         _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
         _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
         _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button, _start_pause_bt_clicked, d);
@@ -262,6 +267,9 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              elm_table_pack(inst->items_table,
                    _label_create(inst->items_table, "Upload", NULL),
                    UPRATE_COL, 0, 1, 1);
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Ratio", NULL),
+                   RATIO_COL, 0, 1, 1);
 
              _box_update(inst);
 
@@ -482,7 +490,7 @@ _next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
 }
 
 static int
-_next_number(Lexer *l)
+_next_integer(Lexer *l)
 {
    _ws_skip(l);
    const char *str = l->current;
@@ -494,6 +502,21 @@ _next_number(Lexer *l)
    n_str[size] = '\0';
    l->current = str;
    return atoi(n_str);
+}
+
+static double
+_next_double(Lexer *l)
+{
+   _ws_skip(l);
+   const char *str = l->current;
+   while (*str && ((*str >= '0' && *str <= '9') || *str == '.')) str++;
+   if (str == l->current) return -1;
+   int size = str - l->current;
+   char *n_str = alloca(size + 1);
+   memcpy(n_str, l->current, size);
+   n_str[size] = '\0';
+   l->current = str;
+   return atof(n_str);
 }
 
 static Eina_Bool
@@ -606,6 +629,7 @@ _json_data_parse(Instance *inst)
                   char *name = NULL;
                   int leftuntildone = 0, id = 0, status = 0, uprate = 0, downrate = 0;
                   unsigned int size = 0;
+                  double ratio = 0.0;
                   if (!_is_next_token(&l, "{")) return EINA_FALSE;
                   while (!_is_next_token(&l, "}"))
                     {
@@ -616,33 +640,38 @@ _json_data_parse(Instance *inst)
                          }
                        else if (_is_next_token(&l, "\"id\":"))
                          {
-                            id = _next_number(&l);
+                            id = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"status\":"))
                          {
-                            status = _next_number(&l);
+                            status = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"leftUntilDone\":"))
                          {
-                            leftuntildone = _next_number(&l);
+                            leftuntildone = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"rateDownload\":"))
                          {
-                            downrate = _next_number(&l);
+                            downrate = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"rateUpload\":"))
                          {
-                            uprate = _next_number(&l);
+                            uprate = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
                          }
                        else if (_is_next_token(&l, "\"sizeWhenDone\":"))
                          {
-                            size = _next_number(&l);
+                            size = _next_integer(&l);
                             _jump_at(&l, ",", EINA_TRUE);
+                         }
+                       else if (_is_next_token(&l, "\"uploadRatio\":"))
+                         {
+                            ratio = _next_double(&l);
+                            _jump_at(&l, "}", EINA_FALSE);
                          }
                        else _jump_at(&l, "}", EINA_FALSE);
                     }
@@ -660,6 +689,7 @@ _json_data_parse(Instance *inst)
                        d->size = size;
                        d->downrate = downrate;
                        d->uprate = uprate;
+                       d->ratio = ratio;
                        d->status = status;
                        d->done = 100.0 - (100 * ((double)leftuntildone / size));
                        free(name);
