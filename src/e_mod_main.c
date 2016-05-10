@@ -253,22 +253,22 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              eo_wref_add(o, &inst->items_table);
 
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Torrent name", NULL),
+                   _label_create(inst->items_table, "<b>Torrent name</b>", NULL),
                    NAME_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Size", NULL),
+                   _label_create(inst->items_table, "<b>Size</b>", NULL),
                    SIZE_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Done", NULL),
+                   _label_create(inst->items_table, "<b>Done</b>", NULL),
                    DONE_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Download", NULL),
+                   _label_create(inst->items_table, "<b>Download</b>", NULL),
                    DOWNRATE_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Upload", NULL),
+                   _label_create(inst->items_table, "<b>Upload</b>", NULL),
                    UPRATE_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "Ratio", NULL),
+                   _label_create(inst->items_table, "<b>Ratio</b>", NULL),
                    RATIO_COL, 0, 1, 1);
 
              _box_update(inst);
