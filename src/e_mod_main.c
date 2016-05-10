@@ -17,18 +17,6 @@ typedef struct
 
 typedef struct
 {
-   const char *name;
-   unsigned int size, downrate, uprate, id, status;
-
-   int table_idx;
-   Eo *name_label;
-   Eo *size_label;
-   Eo *downrate_label, *uprate_label;
-   Eo *start_button, *start_icon, *pause_icon;
-} Item_Desc;
-
-typedef struct
-{
    E_Gadcon_Client *gcc;
    Ecore_Timer *timer;
    Config_Item *ci;
@@ -41,6 +29,19 @@ typedef struct
    int torrents_data_buf_len;
    int torrents_data_len;
 } Instance;
+
+typedef struct
+{
+   Instance *inst;
+   const char *name;
+   unsigned int size, downrate, uprate, id, status;
+
+   int table_idx;
+   Eo *name_label;
+   Eo *size_label;
+   Eo *downrate_label, *uprate_label;
+   Eo *start_button, *start_icon, *pause_icon;
+} Item_Desc;
 
 static E_Config_DD *conf_edd = NULL;
 static E_Config_DD *conf_item_edd = NULL;
@@ -102,7 +103,7 @@ _label_create(Eo *parent, const char *text, Eo **wref)
 }
 
 static Eo *
-_button_create(Eo *parent, const char *text, Eo *icon, Eo **wref)
+_button_create(Eo *parent, const char *text, Eo *icon, Eo **wref, Evas_Smart_Cb cb_func, void *cb_data)
 {
    Eo *bt = wref ? *wref : NULL;
    if (!bt)
@@ -112,6 +113,7 @@ _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref)
         evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, 0.0);
         evas_object_show(bt);
         if (wref) eo_wref_add(bt, wref);
+        if (cb_func) evas_object_smart_callback_add(bt, "clicked", cb_func, cb_data);
      }
    elm_object_text_set(bt, text);
    elm_object_part_content_set(bt, "icon", icon);
@@ -130,6 +132,24 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
         if (wref) eo_wref_add(ic, wref);
      }
    return ic;
+}
+
+static void
+_start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+   Item_Desc *d = data;
+   Instance *inst = d->inst;
+   char request[256];
+   char url[1024];
+   if (!inst->session_id) return;
+   sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
+         d->status ? "stop" : "start", d->id);
+   sprintf(url, baseUrl, IP_ADDR);
+   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   if (!ec_url) return;
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
+   ecore_con_url_post(ec_url, request, strlen(request), NULL);
 }
 
 static void
@@ -171,7 +191,7 @@ _box_update(Instance *inst)
 
         _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
         _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
-        _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button);
+        _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button, _start_pause_bt_clicked, d);
         elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
      }
 }
@@ -628,6 +648,7 @@ _json_data_parse(Instance *inst)
                          {
                             d = E_NEW(Item_Desc, 1);
                             inst->items_list = eina_list_append(inst->items_list, d);
+                            d->inst = inst;
                             d->id = id;
                             d->name = eina_stringshare_add(name);
                          }
