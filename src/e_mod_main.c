@@ -35,10 +35,12 @@ typedef struct
    Instance *inst;
    const char *name;
    unsigned int size, downrate, uprate, id, status;
+   double done;
 
    int table_idx;
    Eo *name_label;
    Eo *size_label;
+   Eo *done_label;
    Eo *downrate_label, *uprate_label;
    Eo *start_button, *start_icon, *pause_icon;
 } Item_Desc;
@@ -79,6 +81,7 @@ enum
 {
    NAME_COL,
    SIZE_COL,
+   DONE_COL,
    DOWNRATE_COL,
    UPRATE_COL,
    PLAY_COL
@@ -176,6 +179,10 @@ _box_update(Instance *inst)
         _label_create(inst->items_table, str, &d->size_label);
         elm_table_pack(inst->items_table, d->size_label, SIZE_COL, d->table_idx, 1, 1);
 
+        sprintf(str, "%5.1f%%", d->done);
+        _label_create(inst->items_table, str, &d->done_label);
+        elm_table_pack(inst->items_table, d->done_label, DONE_COL, d->table_idx, 1, 1);
+
         _size_to_string(d->downrate, "/s", str);
         _label_create(inst->items_table, d->downrate ? str : "---", &d->downrate_label);
         elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
@@ -246,6 +253,9 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              elm_table_pack(inst->items_table,
                    _label_create(inst->items_table, "Size", NULL),
                    SIZE_COL, 0, 1, 1);
+             elm_table_pack(inst->items_table,
+                   _label_create(inst->items_table, "Done", NULL),
+                   DONE_COL, 0, 1, 1);
              elm_table_pack(inst->items_table,
                    _label_create(inst->items_table, "Download", NULL),
                    DOWNRATE_COL, 0, 1, 1);
@@ -651,6 +661,7 @@ _json_data_parse(Instance *inst)
                        d->downrate = downrate;
                        d->uprate = uprate;
                        d->status = status;
+                       d->done = 100.0 - (100 * ((double)leftuntildone / size));
                        free(name);
                     }
                   _is_next_token(&l, ",");
