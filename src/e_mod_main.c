@@ -61,10 +61,9 @@ _menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
    cpu_conf->menu_interval = NULL;
 }
 
-static char *
-_size_to_string(double size, const char *suffix)
+static void
+_size_to_string(double size, const char *suffix, char *out)
 {
-   char *str = malloc(10 + (suffix ? strlen(suffix) : 0));
    const char* units[] = {"B", "KB", "MB", "GB", NULL};
    const char* formats[] = {"%5.0f%s%s", "%5.1f%s%s", "%5.1f%s%s", "%5.1f%s%s", NULL};
    unsigned int idx = 0;
@@ -73,8 +72,7 @@ _size_to_string(double size, const char *suffix)
         size /= 1000;
         idx++;
      }
-   sprintf(str, formats[idx], size, units[idx], suffix ? suffix : "");
-   return str;
+   sprintf(out, formats[idx], size, units[idx], suffix ? suffix : "");
 }
 
 enum
@@ -155,7 +153,7 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
 static void
 _box_update(Instance *inst)
 {
-   char *str;
+   char str[128];;
    Eina_List *itr, *itr2;
    Item_Desc *d, *d2;
    EINA_LIST_FOREACH(inst->items_list, itr, d)
@@ -174,19 +172,16 @@ _box_update(Instance *inst)
         _label_create(inst->items_table, d->name, &d->name_label);
         elm_table_pack(inst->items_table, d->name_label, NAME_COL, d->table_idx, 1, 1);
 
-        str = _size_to_string(d->size, NULL);
+        _size_to_string(d->size, NULL, str);
         _label_create(inst->items_table, str, &d->size_label);
-        free(str);
         elm_table_pack(inst->items_table, d->size_label, SIZE_COL, d->table_idx, 1, 1);
 
-        str = d->downrate ? _size_to_string(d->downrate, "/s") : strdup("---");
-        _label_create(inst->items_table, str, &d->downrate_label);
-        free(str);
+        _size_to_string(d->downrate, "/s", str);
+        _label_create(inst->items_table, d->downrate ? str : "---", &d->downrate_label);
         elm_table_pack(inst->items_table, d->downrate_label, DOWNRATE_COL, d->table_idx, 1, 1);
 
-        str = d->uprate ? _size_to_string(d->uprate, "/s") : strdup("---");
-        _label_create(inst->items_table, str, &d->uprate_label);
-        free(str);
+        _size_to_string(d->uprate, "/s", str);
+        _label_create(inst->items_table, d->uprate ? str : "---", &d->uprate_label);
         elm_table_pack(inst->items_table, d->uprate_label, UPRATE_COL, d->table_idx, 1, 1);
 
         _icon_create(inst->items_table, "media-playback-start", &d->start_icon);
