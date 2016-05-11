@@ -22,12 +22,15 @@ typedef struct
    Config_Item *ci;
    E_Gadcon_Popup *popup;
    Evas_Object *o_icon;
-   Eo *main_box, *items_table;
+   Eo *main_box, *items_table, *no_conn_label;
    Eina_List *items_list;
    char *session_id;
    char *torrents_data_buf;
    int torrents_data_buf_len;
    int torrents_data_len;
+
+   Eina_Bool reload : 1;
+
 } Instance;
 
 typedef struct
@@ -43,6 +46,8 @@ typedef struct
    Eo *done_label;
    Eo *downrate_label, *uprate_label, *ratio_label;
    Eo *start_button, *start_icon, *pause_icon;
+
+   Eina_Bool alive : 1;
 } Item_Desc;
 
 static E_Config_DD *conf_edd = NULL;
@@ -160,6 +165,57 @@ _box_update(Instance *inst)
    char str[128];;
    Eina_List *itr, *itr2;
    Item_Desc *d, *d2;
+
+   if (!inst->items_list)
+     {
+        elm_box_clear(inst->main_box);
+        _label_create(inst->main_box, "No connection", &inst->no_conn_label);
+        elm_box_pack_end(inst->main_box, inst->no_conn_label);
+        return;
+     }
+   else
+     {
+        eo_del(inst->no_conn_label);
+     }
+
+   if (!inst->items_table)
+     {
+        Eo *o = elm_table_add(inst->main_box);
+        evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
+        evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
+        elm_table_padding_set(o, 20, 0);
+        elm_box_pack_end(inst->main_box, o);
+        evas_object_show(o);
+        eo_wref_add(o, &inst->items_table);
+        inst->reload = EINA_TRUE;
+     }
+
+   if (inst->reload)
+     {
+        elm_table_clear(inst->items_table, EINA_TRUE);
+
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Torrent name</b>", NULL),
+              NAME_COL, 0, 1, 1);
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Size</b>", NULL),
+              SIZE_COL, 0, 1, 1);
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Done</b>", NULL),
+              DONE_COL, 0, 1, 1);
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Download</b>", NULL),
+              DOWNRATE_COL, 0, 1, 1);
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Upload</b>", NULL),
+              UPRATE_COL, 0, 1, 1);
+        elm_table_pack(inst->items_table,
+              _label_create(inst->items_table, "<b>Ratio</b>", NULL),
+              RATIO_COL, 0, 1, 1);
+
+        inst->reload = EINA_FALSE;
+     }
+
    EINA_LIST_FOREACH(inst->items_list, itr, d)
      {
         if (!d->table_idx)
@@ -243,33 +299,6 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
              evas_object_show(o);
              eo_wref_add(o, &inst->main_box);
-
-             o = elm_table_add(inst->main_box);
-             evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
-             evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
-             elm_table_padding_set(o, 20, 0);
-             elm_box_pack_end(inst->main_box, o);
-             evas_object_show(o);
-             eo_wref_add(o, &inst->items_table);
-
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Torrent name</b>", NULL),
-                   NAME_COL, 0, 1, 1);
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Size</b>", NULL),
-                   SIZE_COL, 0, 1, 1);
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Done</b>", NULL),
-                   DONE_COL, 0, 1, 1);
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Download</b>", NULL),
-                   DOWNRATE_COL, 0, 1, 1);
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Upload</b>", NULL),
-                   UPRATE_COL, 0, 1, 1);
-             elm_table_pack(inst->items_table,
-                   _label_create(inst->items_table, "<b>Ratio</b>", NULL),
-                   RATIO_COL, 0, 1, 1);
 
              _box_update(inst);
 
@@ -701,11 +730,13 @@ _json_data_parse(Instance *inst)
                        if (!d)
                          {
                             d = E_NEW(Item_Desc, 1);
-                            inst->items_list = eina_list_append(inst->items_list, d);
                             d->inst = inst;
                             d->id = id;
                             d->name = eina_stringshare_add(name);
+                            inst->items_list = eina_list_append(inst->items_list, d);
+                            inst->reload = EINA_TRUE;
                          }
+                       d->alive = EINA_TRUE;
                        d->size = size;
                        d->downrate = downrate;
                        d->uprate = uprate;
@@ -719,6 +750,23 @@ _json_data_parse(Instance *inst)
           }
      }
    return EINA_TRUE;
+}
+
+static void
+_items_clear(Instance *inst)
+{
+   Eina_List *itr, *itr2;
+   Item_Desc *d;
+   EINA_LIST_FOREACH_SAFE(inst->items_list, itr, itr2, d)
+     {
+        if (!d->alive)
+          {
+             inst->items_list = eina_list_remove_list(inst->items_list, itr);
+             inst->reload = EINA_TRUE;
+             E_FREE(d);
+          }
+        else d->alive = EINA_FALSE;
+     }
 }
 
 static Eina_Bool
@@ -746,20 +794,14 @@ static Eina_Bool
 _torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
-
-   if (url_complete->status)
-     {
-        Ecore_Con_Url *ec_url = url_complete->url_con;
-        Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
-        void **test = ecore_con_url_data_get(ec_url);
-        if (!inst || !inst->torrents_data_len ||
-              !test || *test != _url_torrents_data_test) return EINA_TRUE;
-          {
-             _json_data_parse(inst);
-             _box_update(inst);
-          }
-        inst->torrents_data_len = 0;
-     }
+   Ecore_Con_Url *ec_url = url_complete->url_con;
+   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   void **test = ecore_con_url_data_get(ec_url);
+   if (!inst || !test || *test != _url_torrents_data_test) return EINA_TRUE;
+   _json_data_parse(inst);
+   _items_clear(inst);
+   _box_update(inst);
+   inst->torrents_data_len = 0;
    return EINA_FALSE;
 }
 
@@ -773,7 +815,12 @@ _torrents_poller_cb(void *data EINA_UNUSED)
    EINA_LIST_FOREACH(instances, itr, inst)
      {
         char url[1024];
-        if (!inst->session_id) continue;
+        if (!inst->session_id)
+          {
+             _items_clear(inst);
+             _box_update(inst);
+             continue;
+          }
         sprintf(url, baseUrl, IP_ADDR);
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) continue;
