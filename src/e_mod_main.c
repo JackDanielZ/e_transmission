@@ -210,6 +210,8 @@ _box_update(Instance *inst)
    Eina_List *itr, *itr2;
    Item_Desc *d, *d2;
 
+   if (!inst->main_box) return;
+
    if (!inst->items_list)
      {
         elm_box_clear(inst->main_box);
@@ -219,7 +221,7 @@ _box_update(Instance *inst)
      }
    else
      {
-        eo_del(inst->no_conn_label);
+        eo_unref(inst->no_conn_label);
      }
 
    if (!inst->items_table)
@@ -454,6 +456,7 @@ _gc_shutdown(E_Gadcon_Client *gcc)
 
    if (inst->timer) ecore_timer_del(inst->timer);
    if (inst->o_icon) evas_object_del(inst->o_icon);
+   if (inst->main_box) evas_object_del(inst->main_box);
 
    instances = eina_list_remove(instances, inst);
    E_FREE(inst);
@@ -813,6 +816,7 @@ _items_clear(Instance *inst)
      {
         if (!d->alive)
           {
+             evas_object_del(inst->items_table);
              inst->items_list = eina_list_remove_list(inst->items_list, itr);
              inst->reload = EINA_TRUE;
              E_FREE(d);
