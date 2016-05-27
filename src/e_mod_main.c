@@ -46,6 +46,8 @@ typedef struct
    Eo *done_label;
    Eo *downrate_label, *uprate_label, *ratio_label;
    Eo *start_button, *start_icon, *pause_icon;
+   Eo *del_button, *del_icon;
+   Eo *delall_button, *delall_icon;
 
    Eina_Bool alive : 1;
 } Item_Desc;
@@ -90,7 +92,9 @@ enum
    DOWNRATE_COL,
    UPRATE_COL,
    RATIO_COL,
-   PLAY_COL
+   PLAY_COL,
+   DEL_COL,
+   DELALL_COL,
 };
 
 static Eo *
@@ -151,6 +155,46 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
    if (!inst->session_id) return;
    sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
          d->status ? "stop" : "start", d->id);
+   sprintf(url, baseUrl, IP_ADDR);
+   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   if (!ec_url) return;
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
+   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+}
+
+static void
+_del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+   Item_Desc *d = data;
+   Instance *inst = d->inst;
+   char request[256];
+   char url[1024];
+   if (!inst->session_id) return;
+   sprintf(request,
+         "{\"method\":\"torrent-remove\", "
+         "\"arguments\":{\"ids\":[%d],\"delete-local-data\":false}}",
+         d->id);
+   sprintf(url, baseUrl, IP_ADDR);
+   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   if (!ec_url) return;
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
+   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+}
+
+static void
+_delall_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+   Item_Desc *d = data;
+   Instance *inst = d->inst;
+   char request[256];
+   char url[1024];
+   if (!inst->session_id) return;
+   sprintf(request,
+         "{\"method\":\"torrent-remove\", "
+         "\"arguments\":{\"ids\":[%d],\"delete-local-data\":true}}",
+         d->id);
    sprintf(url, baseUrl, IP_ADDR);
    Ecore_Con_Url *ec_url = ecore_con_url_new(url);
    if (!ec_url) return;
@@ -256,6 +300,14 @@ _box_update(Instance *inst)
         _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
         _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button, _start_pause_bt_clicked, d);
         elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
+
+        _icon_create(inst->items_table, "edit-delete", &d->del_icon);
+        _button_create(inst->items_table, NULL, d->del_icon, &d->del_button, _del_bt_clicked, d);
+        elm_table_pack(inst->items_table, d->del_button, DEL_COL, d->table_idx, 1, 1);
+
+        _icon_create(inst->items_table, "application-exit", &d->delall_icon);
+        _button_create(inst->items_table, NULL, d->delall_icon, &d->delall_button, _delall_bt_clicked, d);
+        elm_table_pack(inst->items_table, d->delall_button, DELALL_COL, d->table_idx, 1, 1);
      }
 }
 
