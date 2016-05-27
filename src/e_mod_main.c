@@ -3,8 +3,6 @@
 #include <Ecore_Con.h>
 #include "e_mod_main.h"
 
-#define IP_ADDR "127.0.0.1"
-
 static const char *baseUrl = "http://%s:9091/transmission/rpc";
 static void *_url_session_id_data_test = (void *)0;
 static void *_url_torrents_data_test = (void *)1;
@@ -28,6 +26,8 @@ typedef struct
    char *torrents_data_buf;
    int torrents_data_buf_len;
    int torrents_data_len;
+
+   Eina_Stringshare *ip_addr;
 
    Eina_Bool reload : 1;
 
@@ -155,7 +155,7 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
    if (!inst->session_id) return;
    sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
          d->status ? "stop" : "start", d->id);
-   sprintf(url, baseUrl, IP_ADDR);
+   sprintf(url, baseUrl, inst->ip_addr);
    Ecore_Con_Url *ec_url = ecore_con_url_new(url);
    if (!ec_url) return;
    ecore_con_url_proxy_set(ec_url, NULL);
@@ -175,7 +175,7 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
          "{\"method\":\"torrent-remove\", "
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":false}}",
          d->id);
-   sprintf(url, baseUrl, IP_ADDR);
+   sprintf(url, baseUrl, inst->ip_addr);
    Ecore_Con_Url *ec_url = ecore_con_url_new(url);
    if (!ec_url) return;
    ecore_con_url_proxy_set(ec_url, NULL);
@@ -195,7 +195,7 @@ _delall_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EI
          "{\"method\":\"torrent-remove\", "
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":true}}",
          d->id);
-   sprintf(url, baseUrl, IP_ADDR);
+   sprintf(url, baseUrl, inst->ip_addr);
    Ecore_Con_Url *ec_url = ecore_con_url_new(url);
    if (!ec_url) return;
    ecore_con_url_proxy_set(ec_url, NULL);
@@ -427,6 +427,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    char buf[4096];
 
    inst = E_NEW(Instance, 1);
+   inst->ip_addr = "127.0.0.1";
 
    snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
 
@@ -691,7 +692,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
    EINA_LIST_FOREACH(instances, itr, inst)
      {
         char url[1024];
-        sprintf(url, baseUrl, IP_ADDR);
+        sprintf(url, baseUrl, inst->ip_addr);
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) return EINA_TRUE;
         ecore_con_url_proxy_set(ec_url, NULL);
@@ -877,7 +878,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
              _box_update(inst);
              continue;
           }
-        sprintf(url, baseUrl, IP_ADDR);
+        sprintf(url, baseUrl, inst->ip_addr);
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) continue;
         ecore_con_url_proxy_set(ec_url, NULL);
