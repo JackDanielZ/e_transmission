@@ -660,7 +660,7 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
    Ecore_Con_Url *ec_url = url_complete->url_con;
    Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test || *test != _url_session_id_stats_test) return EINA_TRUE;
+   if (!inst || !test || *test != _url_session_id_data_test) return EINA_TRUE;
 
    if (url_complete->status)
      {
@@ -705,7 +705,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) return EINA_TRUE;
         ecore_con_url_proxy_set(ec_url, NULL);
-        ecore_con_url_data_set(ec_url, &_url_session_id_stats_test);
+        ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
         ecore_con_url_get(ec_url);
      }
