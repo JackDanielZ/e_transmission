@@ -5,7 +5,8 @@
 
 static const char *baseUrl = "http://%s:9091/transmission/rpc";
 static void *_url_session_id_data_test = (void *)0;
-static void *_url_torrents_data_test = (void *)1;
+static void *_url_torrents_stats_test = (void *)1;
+static void *_url_torrents_add_test = (void *)2;
 
 typedef struct
 {
@@ -20,10 +21,11 @@ typedef struct
    Config_Item *ci;
    E_Gadcon_Popup *popup;
    Evas_Object *o_icon;
-   Eo *main_box, *items_table, *no_conn_label;
+   Eo *main_box, *items_table, *no_conn_label, *error_label;
    Eina_List *items_list;
    char *session_id;
    char *torrents_data_buf;
+   char *last_error;
    int torrents_data_buf_len;
    int torrents_data_len;
 
@@ -222,6 +224,13 @@ _box_update(Instance *inst)
    else
      {
         eo_unref(inst->no_conn_label);
+     }
+
+   if (inst->last_error)
+     {
+        elm_box_clear(inst->main_box);
+        _label_create(inst->main_box, inst->last_error, &inst->error_label);
+        elm_box_pack_end(inst->main_box, inst->error_label);
      }
 
    if (!inst->items_table)
@@ -651,7 +660,7 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
    Ecore_Con_Url *ec_url = url_complete->url_con;
    Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test || *test != _url_session_id_data_test) return EINA_TRUE;
+   if (!inst || !test || *test != _url_session_id_stats_test) return EINA_TRUE;
 
    if (url_complete->status)
      {
@@ -696,7 +705,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) return EINA_TRUE;
         ecore_con_url_proxy_set(ec_url, NULL);
-        ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
+        ecore_con_url_data_set(ec_url, &_url_session_id_stats_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
         ecore_con_url_get(ec_url);
      }
@@ -833,7 +842,9 @@ _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_
    Ecore_Con_Url *ec_url = url_data->url_con;
    Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test || *test != _url_torrents_data_test) return EINA_TRUE;
+   if (!inst || !test ||
+         (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
+         return EINA_TRUE;
    if (url_data->size > (inst->torrents_data_buf_len - inst->torrents_data_len))
      {
         inst->torrents_data_buf_len = inst->torrents_data_len + url_data->size;
@@ -854,11 +865,27 @@ _torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void 
    Ecore_Con_Url *ec_url = url_complete->url_con;
    Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test || *test != _url_torrents_data_test) return EINA_TRUE;
-   _json_data_parse(inst);
-   _items_clear(inst);
-   _box_update(inst);
-   inst->torrents_data_len = 0;
+   if (!inst || !test ||
+         (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
+         return EINA_TRUE;
+   char *result_str = strstr(inst->torrents_data_buf, "\"result\":");
+   if (!result_str) return EINA_FALSE;
+   if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
+     {
+        if (inst->last_error) free(inst->last_error);
+        char *end = strchr(result_str + strlen("\"result\":\""), '\"');
+        inst->last_error = malloc(end - result_str + 1);
+        strncpy(inst->last_error, result_str, end - result_str);
+        inst->torrents_data_len = 0;
+        return EINA_FALSE;
+     }
+   if (*test == _url_torrents_stats_test)
+     {
+        _json_data_parse(inst);
+        _items_clear(inst);
+        _box_update(inst);
+        inst->torrents_data_len = 0;
+     }
    return EINA_FALSE;
 }
 
@@ -882,7 +909,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
         Ecore_Con_Url *ec_url = ecore_con_url_new(url);
         if (!ec_url) continue;
         ecore_con_url_proxy_set(ec_url, NULL);
-        ecore_con_url_data_set(ec_url, &_url_torrents_data_test);
+        ecore_con_url_data_set(ec_url, &_url_torrents_stats_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
 
         ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
