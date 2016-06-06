@@ -2,6 +2,7 @@
 #include <Ecore.h>
 #include <Ecore_Con.h>
 #include "e_mod_main.h"
+#include "base64.h"
 
 static const char *baseUrl = "http://%s:9091/transmission/rpc";
 static void *_url_session_id_data_test = (void *)0;
@@ -29,7 +30,8 @@ typedef struct
    int torrents_data_buf_len;
    int torrents_data_len;
 
-   Eina_Stringshare *ip_addr;
+   Eina_Stringshare *ip_addr, *torrents_dir;
+   Ecore_File_Monitor *torrents_dir_monitor;
 
    Eina_Bool reload : 1;
 
@@ -147,6 +149,16 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
    return ic;
 }
 
+static Ecore_Con_Url *
+_url_create(const char *url)
+{
+   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   if (!ec_url) return NULL;
+   ecore_con_url_proxy_set(ec_url, NULL);
+   ecore_con_url_additional_header_add(ec_url, "Accept-Encoding", "identity");
+   return ec_url;
+}
+
 static void
 _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
 {
@@ -158,9 +170,8 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
    sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
          d->status ? "stop" : "start", d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   Ecore_Con_Url *ec_url = _url_create(url);
    if (!ec_url) return;
-   ecore_con_url_proxy_set(ec_url, NULL);
    ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
    ecore_con_url_post(ec_url, request, strlen(request), NULL);
 }
@@ -178,9 +189,8 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":false}}",
          d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   Ecore_Con_Url *ec_url = _url_create(url);
    if (!ec_url) return;
-   ecore_con_url_proxy_set(ec_url, NULL);
    ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
    ecore_con_url_post(ec_url, request, strlen(request), NULL);
 }
@@ -198,9 +208,8 @@ _delall_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EI
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":true}}",
          d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+   Ecore_Con_Url *ec_url = _url_create(url);
    if (!ec_url) return;
-   ecore_con_url_proxy_set(ec_url, NULL);
    ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
    ecore_con_url_post(ec_url, request, strlen(request), NULL);
 }
@@ -428,6 +437,67 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
      }
 }
 
+static Eina_Bool
+_torrent_add(Instance *inst, const char *file)
+{
+   char url[1024], full_path[256];
+   char *content = NULL, *ret_content = NULL, *request = NULL;
+   int filesize, retsize;
+   Eina_Bool ret = EINA_FALSE;
+   if (!inst->session_id) goto end;
+
+   sprintf(full_path, "%s/%s", inst->torrents_dir, file);
+   FILE *fp = fopen(full_path, "rb");
+   if (!fp) goto end;
+   fseek(fp, 0, SEEK_END);
+   filesize = ftell(fp);
+   if (filesize < 0) goto end;
+   fseek(fp, 0, SEEK_SET);
+   content = malloc(filesize + 1);
+   if (fread(content, filesize, 1, fp) != 1) goto end;
+   content[filesize] = '\0';
+   fclose(fp);
+
+   ret_content = base64_encode(content, filesize, &retsize);
+   request = malloc(retsize + 256);
+   sprintf(request,
+         "{\"method\":\"torrent-add\", "
+         "\"arguments\":{\"metainfo\":\"%s\"}}", ret_content);
+   sprintf(url, baseUrl, inst->ip_addr);
+   Ecore_Con_Url *ec_url = _url_create(url);
+   if (!ec_url) goto end;
+   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
+   ecore_con_url_data_set(ec_url, &_url_torrents_add_test);
+   eo_key_data_set(ec_url, "Transmission_Instance", inst);
+   eo_key_data_set(ec_url, "Transmission_FileToRemove", eina_stringshare_add(full_path));
+   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+   ret = EINA_TRUE;
+end:
+   free(content);
+   free(ret_content);
+   free(request);
+   return ret;
+}
+
+static void
+_torrents_dir_changed(void *data,
+      Ecore_File_Monitor *em EINA_UNUSED,
+      Ecore_File_Event event EINA_UNUSED, const char *path EINA_UNUSED)
+{
+   Instance *inst = data;
+   Eina_List *l = ecore_file_ls(inst->torrents_dir);
+   char *file;
+   Eina_Bool stop = EINA_FALSE;
+   EINA_LIST_FREE(l, file)
+     {
+        if (!stop && eina_str_has_suffix(file, ".torrent"))
+          {
+             stop = _torrent_add(inst, file);
+          }
+        free(file);
+     }
+}
+
 static E_Gadcon_Client *
 _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 {
@@ -437,12 +507,16 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 
    inst = E_NEW(Instance, 1);
    inst->ip_addr = "127.0.0.1";
+   inst->torrents_dir = "/home/daniel/Downloads";
+   inst->torrents_dir_monitor = ecore_file_monitor_add(inst->torrents_dir,
+         _torrents_dir_changed, inst);
 
    snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
 
    inst->o_icon = edje_object_add(gc->evas);
    if (!e_theme_edje_object_set(inst->o_icon,
-				"base/theme/modules/transmission", "modules/transmission/main"))
+				"base/theme/modules/transmission",
+                                "modules/transmission/main"))
       edje_object_file_set(inst->o_icon, buf, "modules/transmission/main");
    evas_object_show(inst->o_icon);
 
@@ -682,6 +756,7 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
                          }
                     }
                }
+             _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
           }
      }
    else
@@ -702,9 +777,8 @@ _session_id_poller_cb(void *data EINA_UNUSED)
      {
         char url[1024];
         sprintf(url, baseUrl, inst->ip_addr);
-        Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+        Ecore_Con_Url *ec_url = _url_create(url);
         if (!ec_url) return EINA_TRUE;
-        ecore_con_url_proxy_set(ec_url, NULL);
         ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
         ecore_con_url_get(ec_url);
@@ -886,6 +960,13 @@ _torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void 
         _box_update(inst);
         inst->torrents_data_len = 0;
      }
+   if (*test == _url_torrents_add_test)
+     {
+        Eina_Stringshare *name = eo_key_data_get(ec_url, "Transmission_FileToRemove");
+        remove(name);
+        eina_stringshare_del(name);
+        _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
+     }
    return EINA_FALSE;
 }
 
@@ -906,9 +987,8 @@ _torrents_poller_cb(void *data EINA_UNUSED)
              continue;
           }
         sprintf(url, baseUrl, inst->ip_addr);
-        Ecore_Con_Url *ec_url = ecore_con_url_new(url);
+        Ecore_Con_Url *ec_url = _url_create(url);
         if (!ec_url) continue;
-        ecore_con_url_proxy_set(ec_url, NULL);
         ecore_con_url_data_set(ec_url, &_url_torrents_stats_test);
         eo_key_data_set(ec_url, "Transmission_Instance", inst);
 
