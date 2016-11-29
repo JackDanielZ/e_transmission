@@ -1,3 +1,6 @@
+#define EFL_BETA_API_SUPPORT
+#define EFL_EO_API_SUPPORT
+
 #include <e.h>
 #include <Ecore.h>
 #include <Ecore_Con.h>
@@ -111,7 +114,7 @@ _label_create(Eo *parent, const char *text, Eo **wref)
         evas_object_size_hint_align_set(label, 0.0, EVAS_HINT_FILL);
         evas_object_size_hint_weight_set(label, EVAS_HINT_EXPAND, 0.0);
         evas_object_show(label);
-        if (wref) eo_wref_add(label, wref);
+        if (wref) efl_wref_add(label, wref);
      }
    elm_object_text_set(label, text);
    return label;
@@ -127,7 +130,7 @@ _button_create(Eo *parent, const char *text, Eo *icon, Eo **wref, Evas_Smart_Cb 
         evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
         evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, 0.0);
         evas_object_show(bt);
-        if (wref) eo_wref_add(bt, wref);
+        if (wref) efl_wref_add(bt, wref);
         if (cb_func) evas_object_smart_callback_add(bt, "clicked", cb_func, cb_data);
      }
    elm_object_text_set(bt, text);
@@ -144,7 +147,7 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
         ic = elm_icon_add(parent);
         elm_icon_standard_set(ic, path);
         evas_object_show(ic);
-        if (wref) eo_wref_add(ic, wref);
+        if (wref) efl_wref_add(ic, wref);
      }
    return ic;
 }
@@ -232,7 +235,7 @@ _box_update(Instance *inst)
      }
    else
      {
-        eo_unref(inst->no_conn_label);
+        efl_unref(inst->no_conn_label);
      }
 
    if (inst->last_error)
@@ -250,7 +253,7 @@ _box_update(Instance *inst)
         elm_table_padding_set(o, 20, 0);
         elm_box_pack_end(inst->main_box, o);
         evas_object_show(o);
-        eo_wref_add(o, &inst->items_table);
+        efl_wref_add(o, &inst->items_table);
         inst->reload = EINA_TRUE;
      }
 
@@ -370,7 +373,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
              evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
              evas_object_show(o);
-             eo_wref_add(o, &inst->main_box);
+             efl_wref_add(o, &inst->main_box);
 
              _box_update(inst);
 
@@ -468,8 +471,8 @@ _torrent_add(Instance *inst, const char *file)
    if (!ec_url) goto end;
    ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
    ecore_con_url_data_set(ec_url, &_url_torrents_add_test);
-   eo_key_data_set(ec_url, "Transmission_Instance", inst);
-   eo_key_data_set(ec_url, "Transmission_FileToRemove", eina_stringshare_add(full_path));
+   efl_key_data_set(ec_url, "Transmission_Instance", inst);
+   efl_key_data_set(ec_url, "Transmission_FileToRemove", eina_stringshare_add(full_path));
    ecore_con_url_post(ec_url, request, strlen(request), NULL);
    ret = EINA_TRUE;
 end:
@@ -732,7 +735,7 @@ _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_inf
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
    Ecore_Con_Url *ec_url = url_complete->url_con;
-   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
    if (!inst || !test || *test != _url_session_id_data_test) return EINA_TRUE;
 
@@ -780,7 +783,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
         Ecore_Con_Url *ec_url = _url_create(url);
         if (!ec_url) return EINA_TRUE;
         ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
-        eo_key_data_set(ec_url, "Transmission_Instance", inst);
+        efl_key_data_set(ec_url, "Transmission_Instance", inst);
         ecore_con_url_get(ec_url);
      }
    return EINA_TRUE;
@@ -914,7 +917,7 @@ _torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_
 {
    Ecore_Con_Event_Url_Data *url_data = event_info;
    Ecore_Con_Url *ec_url = url_data->url_con;
-   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
    if (!inst || !test ||
          (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
@@ -937,7 +940,7 @@ _torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void 
 {
    Ecore_Con_Event_Url_Complete *url_complete = event_info;
    Ecore_Con_Url *ec_url = url_complete->url_con;
-   Instance *inst = eo_key_data_get(ec_url, "Transmission_Instance");
+   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
    void **test = ecore_con_url_data_get(ec_url);
    if (!inst || !test ||
          (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
@@ -962,7 +965,7 @@ _torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void 
      }
    if (*test == _url_torrents_add_test)
      {
-        Eina_Stringshare *name = eo_key_data_get(ec_url, "Transmission_FileToRemove");
+        Eina_Stringshare *name = efl_key_data_get(ec_url, "Transmission_FileToRemove");
         remove(name);
         eina_stringshare_del(name);
         _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
@@ -990,7 +993,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
         Ecore_Con_Url *ec_url = _url_create(url);
         if (!ec_url) continue;
         ecore_con_url_data_set(ec_url, &_url_torrents_stats_test);
-        eo_key_data_set(ec_url, "Transmission_Instance", inst);
+        efl_key_data_set(ec_url, "Transmission_Instance", inst);
 
         ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
         //ecore_con_url_additional_header_add(ec_url, "Content-Length", len);
