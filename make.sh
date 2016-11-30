@@ -1,4 +1,4 @@
-gcc -fPIC -c src/e_mod_main.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/e_mod_main.o
+gcc -fPIC -g -c src/e_mod_main.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/e_mod_main.o
 [ $? -eq 0 ] || exit 1
 gcc -fPIC -c src/base64.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/base64.o
 [ $? -eq 0 ] || exit 1

@@ -12,9 +12,6 @@
 #include "base64.h"
 
 static const char *baseUrl = "http://%s:9091/transmission/rpc";
-static void *_url_session_id_data_test = (void *)0;
-static void *_url_torrents_stats_test = (void *)1;
-static void *_url_torrents_add_test = (void *)2;
 
 typedef struct
 {
@@ -36,8 +33,8 @@ typedef struct
    char *session_id;
    char *torrents_data_buf;
    char *last_error;
-   int torrents_data_buf_len;
-   int torrents_data_len;
+   unsigned int torrents_data_buf_len;
+   unsigned int torrents_data_len;
 
    Eina_Stringshare *ip_addr, *torrents_dir;
    Ecore_File_Monitor *torrents_dir_monitor;
@@ -161,14 +158,67 @@ _icon_create(Eo *parent, const char *path, Eo **wref)
    return ic;
 }
 
-static Ecore_Con_Url *
-_url_create(const char *url)
+static void
+_can_read_changed(void *data EINA_UNUSED, const Efl_Event *ev)
 {
-   Ecore_Con_Url *ec_url = ecore_con_url_new(url);
-   if (!ec_url) return NULL;
-   ecore_con_url_proxy_set(ec_url, NULL);
-   ecore_con_url_additional_header_add(ec_url, "Accept-Encoding", "identity");
-   return ec_url;
+   static int max_size = 16384;
+   Eina_Rw_Slice slice;
+   Eo *dialer = ev->object;
+   Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
+   if (efl_key_data_get(dialer, "can_read_changed")) return;
+   efl_key_data_set(dialer, "can_read_changed", dialer);
+
+   slice.mem = malloc(max_size);
+   slice.len = max_size;
+
+   while (efl_io_reader_can_read_get(dialer))
+     {
+        if (efl_io_reader_read(dialer, &slice)) goto ret;
+        if (slice.len > (inst->torrents_data_buf_len - inst->torrents_data_len))
+          {
+             inst->torrents_data_buf_len = inst->torrents_data_len + slice.len;
+             inst->torrents_data_buf = realloc(inst->torrents_data_buf,
+                   inst->torrents_data_buf_len + 1);
+          }
+        memcpy(inst->torrents_data_buf + inst->torrents_data_len,
+              slice.mem, slice.len);
+        inst->torrents_data_len += slice.len;
+        inst->torrents_data_buf[inst->torrents_data_len] = '\0';
+        slice.len = max_size;
+     }
+ret:
+   free(slice.mem);
+   efl_key_data_set(dialer, "can_read_changed", NULL);
+}
+
+static Efl_Net_Dialer_Http *
+_dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
+{
+   Eo *dialer = efl_add(EFL_NET_DIALER_HTTP_CLASS, ecore_main_loop_get(),
+         efl_net_dialer_http_method_set(efl_added, is_get_method?"GET":"POST"),
+         efl_net_dialer_proxy_set(efl_added, NULL),
+         efl_net_dialer_http_request_header_add(efl_added, "Accept-Encoding", "identity"),
+         efl_event_callback_add(efl_added, EFL_IO_READER_EVENT_CAN_READ_CHANGED, _can_read_changed, NULL));
+   if (cb)
+      efl_event_callback_add(dialer, EFL_IO_READER_EVENT_EOS, cb, NULL);
+
+   if (!is_get_method && data)
+     {
+        Eina_Slice slice = { .mem = data, .len = strlen(data) };
+        Eo *buffer = efl_add(EFL_IO_BUFFER_CLASS, efl_loop_get(dialer),
+              efl_name_set(efl_added, "post-buffer"),
+              efl_io_closer_close_on_destructor_set(efl_added, EINA_TRUE),
+              efl_io_closer_close_on_exec_set(efl_added, EINA_TRUE));
+        efl_io_writer_write(buffer, &slice, NULL);
+
+        efl_add(EFL_IO_COPIER_CLASS, efl_loop_get(dialer),
+              efl_name_set(efl_added, "copier-buffer-dialer"),
+              efl_io_copier_source_set(efl_added, buffer),
+              efl_io_copier_destination_set(efl_added, dialer),
+              efl_io_closer_close_on_destructor_set(efl_added, EINA_FALSE));
+     }
+
+   return dialer;
 }
 
 static void
@@ -182,10 +232,10 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
    sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
          d->status ? "stop" : "start", d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = _url_create(url);
-   if (!ec_url) return;
-   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
-   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+   Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, NULL);
+   efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
+   efl_key_data_set(dialer, "Transmission_Instance", inst);
+   efl_net_dialer_dial(dialer, url);
 }
 
 static void
@@ -201,10 +251,10 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":false}}",
          d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = _url_create(url);
-   if (!ec_url) return;
-   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
-   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+   Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, NULL);
+   efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
+   efl_key_data_set(dialer, "Transmission_Instance", inst);
+   efl_net_dialer_dial(dialer, url);
 }
 
 static void
@@ -220,10 +270,10 @@ _delall_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EI
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":true}}",
          d->id);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = _url_create(url);
-   if (!ec_url) return;
-   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
-   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+   Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, NULL);
+   efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
+   efl_key_data_set(dialer, "Transmission_Instance", inst);
+   efl_net_dialer_dial(dialer, url);
 }
 
 static void
@@ -451,6 +501,9 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 }
 #endif
 
+static void
+_torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev);
+
 static Eina_Bool
 _torrent_add(Instance *inst, const char *file)
 {
@@ -478,13 +531,11 @@ _torrent_add(Instance *inst, const char *file)
          "{\"method\":\"torrent-add\", "
          "\"arguments\":{\"metainfo\":\"%s\"}}", ret_content);
    sprintf(url, baseUrl, inst->ip_addr);
-   Ecore_Con_Url *ec_url = _url_create(url);
-   if (!ec_url) goto end;
-   ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
-   ecore_con_url_data_set(ec_url, &_url_torrents_add_test);
-   efl_key_data_set(ec_url, "Transmission_Instance", inst);
-   efl_key_data_set(ec_url, "Transmission_FileToRemove", eina_stringshare_add(full_path));
-   ecore_con_url_post(ec_url, request, strlen(request), NULL);
+   Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, _torrent_added_cb);
+   efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
+   efl_key_data_set(dialer, "Transmission_Instance", inst);
+   efl_key_data_set(dialer, "Transmission_FileToRemove", eina_stringshare_add(full_path));
+   efl_net_dialer_dial(dialer, url);
    ret = EINA_TRUE;
 end:
    free(content);
@@ -520,6 +571,7 @@ _torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    remove(name);
    eina_stringshare_del(name);
    _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
+   inst->torrents_data_len = 0;
 }
 
 static Instance *
@@ -751,45 +803,26 @@ static const E_Gadcon_Client_Class _gc_class =
 };
 #endif
 
-static Eina_Bool
-_session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+static void
+_session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
-   Ecore_Con_Event_Url_Complete *url_complete = event_info;
-   Ecore_Con_Url *ec_url = url_complete->url_con;
-   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
-   void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test || *test != _url_session_id_data_test) return EINA_TRUE;
+   Efl_Net_Dialer_Http *dialer = ev->object;
+   Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
 
-   if (url_complete->status)
+   if (!inst->session_id && inst->torrents_data_buf)
      {
-        if (!inst->session_id)
+        char *id = strstr(inst->torrents_data_buf, "X-Transmission-Session-Id: ");
+        if (id)
           {
-             const Eina_List *hdrs = ecore_con_url_response_headers_get(ec_url), *itr;
-             char *hdr;
-             EINA_LIST_FOREACH(hdrs, itr, hdr)
-               {
-                  if (strstr(hdr, "X-Transmission-Session-Id"))
-                    {
-                       char *tmp;
-                       inst->session_id = strdup(hdr + 27);
-                       tmp = inst->session_id;
-                       while (*tmp)
-                         {
-                            if (*tmp == 0x0D) *tmp = '\0';
-                            else tmp++;
-                         }
-                    }
-               }
-             _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
+             char *end = strchr(id, '<');
+             *end = '\0';
+             id = strchr(id, ' ') + 1;
+             inst->session_id = strdup(id);
+             printf("%s\n", inst->session_id);
           }
+        _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
      }
-   else
-     {
-        free(inst->session_id);
-        inst->session_id = NULL;
-     }
-
-   return EINA_FALSE;
+   inst->torrents_data_len = 0;
 }
 
 static Eina_Bool
@@ -801,11 +834,9 @@ _session_id_poller_cb(void *data EINA_UNUSED)
      {
         char url[1024];
         sprintf(url, baseUrl, inst->ip_addr);
-        Ecore_Con_Url *ec_url = _url_create(url);
-        if (!ec_url) return EINA_TRUE;
-        ecore_con_url_data_set(ec_url, &_url_session_id_data_test);
-        efl_key_data_set(ec_url, "Transmission_Instance", inst);
-        ecore_con_url_get(ec_url);
+        Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_TRUE, NULL, _session_id_get_cb);
+        efl_key_data_set(dialer, "Transmission_Instance", inst);
+        efl_net_dialer_dial(dialer, url);
      }
    return EINA_TRUE;
 }
@@ -933,65 +964,27 @@ _items_clear(Instance *inst)
      }
 }
 
-static Eina_Bool
-_torrents_data_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
+static void
+_torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
-   Ecore_Con_Event_Url_Data *url_data = event_info;
-   Ecore_Con_Url *ec_url = url_data->url_con;
-   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
-   void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test ||
-         (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
-         return EINA_TRUE;
-   if (url_data->size > (inst->torrents_data_buf_len - inst->torrents_data_len))
-     {
-        inst->torrents_data_buf_len = inst->torrents_data_len + url_data->size;
-        inst->torrents_data_buf = realloc(inst->torrents_data_buf,
-              inst->torrents_data_buf_len + 1);
-     }
-   memcpy(inst->torrents_data_buf + inst->torrents_data_len,
-         url_data->data, url_data->size);
-   inst->torrents_data_len += url_data->size;
-   inst->torrents_data_buf[inst->torrents_data_len] = '\0';
-   return EINA_FALSE;
-}
-
-static Eina_Bool
-_torrents_data_status_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
-{
-   Ecore_Con_Event_Url_Complete *url_complete = event_info;
-   Ecore_Con_Url *ec_url = url_complete->url_con;
-   Instance *inst = efl_key_data_get(ec_url, "Transmission_Instance");
-   void **test = ecore_con_url_data_get(ec_url);
-   if (!inst || !test ||
-         (*test != _url_torrents_stats_test && *test != _url_torrents_add_test))
-         return EINA_TRUE;
+   Efl_Net_Dialer_Http *dialer = ev->object;
+   Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
    char *result_str = strstr(inst->torrents_data_buf, "\"result\":");
-   if (!result_str) return EINA_FALSE;
+   if (!result_str) return;
    if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
      {
         if (inst->last_error) free(inst->last_error);
         char *end = strchr(result_str + strlen("\"result\":\""), '\"');
         inst->last_error = malloc(end - result_str + 1);
         strncpy(inst->last_error, result_str, end - result_str);
-        inst->torrents_data_len = 0;
-        return EINA_FALSE;
      }
-   if (*test == _url_torrents_stats_test)
+   else
      {
         _json_data_parse(inst);
         _items_clear(inst);
         _box_update(inst);
-        inst->torrents_data_len = 0;
      }
-   if (*test == _url_torrents_add_test)
-     {
-        Eina_Stringshare *name = efl_key_data_get(ec_url, "Transmission_FileToRemove");
-        remove(name);
-        eina_stringshare_del(name);
-        _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
-     }
-   return EINA_FALSE;
+   inst->torrents_data_len = 0;
 }
 
 static Eina_Bool
@@ -1000,7 +993,6 @@ _torrents_poller_cb(void *data EINA_UNUSED)
    Eina_List *itr;
    Instance *inst;
    const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
-   int len = strlen(fields_list);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
         char url[1024];
@@ -1011,15 +1003,10 @@ _torrents_poller_cb(void *data EINA_UNUSED)
              continue;
           }
         sprintf(url, baseUrl, inst->ip_addr);
-        Ecore_Con_Url *ec_url = _url_create(url);
-        if (!ec_url) continue;
-        ecore_con_url_data_set(ec_url, &_url_torrents_stats_test);
-        efl_key_data_set(ec_url, "Transmission_Instance", inst);
-
-        ecore_con_url_additional_header_add(ec_url, "X-Transmission-Session-Id", inst->session_id);
-        //ecore_con_url_additional_header_add(ec_url, "Content-Length", len);
-
-        ecore_con_url_post(ec_url, fields_list, len, NULL);
+        Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, fields_list, _torrents_stats_get_cb);
+        efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
+        efl_key_data_set(dialer, "Transmission_Instance", inst);
+        efl_net_dialer_dial(dialer, url);
      }
    return EINA_TRUE;
 }
@@ -1066,9 +1053,6 @@ e_modapi_init(E_Module *m)
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
 
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _session_id_get_cb, NULL);
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_DATA, _torrents_data_get_cb, NULL);
-   ecore_event_handler_add(ECORE_CON_EVENT_URL_COMPLETE, _torrents_data_status_get_cb, NULL);
    ecore_timer_add(1.0, _session_id_poller_cb, NULL);
    ecore_timer_add(1.0, _torrents_poller_cb, NULL);
    _session_id_poller_cb(NULL);
