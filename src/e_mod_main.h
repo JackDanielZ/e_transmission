@@ -6,6 +6,7 @@
 #endif
 #define EAPI __attribute__ ((visibility("default")))
 
+#ifndef STAND_ALONE
 typedef struct _Config Config;
 typedef struct _Config_Item Config_Item;
 
@@ -34,5 +35,6 @@ EAPI int   e_modapi_save     (E_Module *m);
 //void _config_cpu_module      (Config_Item *ci);
 
 extern Config *cpu_conf;
+#endif
 
 #endif

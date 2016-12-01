@@ -1,7 +1,11 @@
 #define EFL_BETA_API_SUPPORT
 #define EFL_EO_API_SUPPORT
 
+#ifndef STAND_ALONE
 #include <e.h>
+#else
+#include <Elementary.h>
+#endif
 #include <Ecore.h>
 #include <Ecore_Con.h>
 #include "e_mod_main.h"
@@ -20,10 +24,12 @@ typedef struct
 
 typedef struct
 {
+#ifndef STAND_ALONE
    E_Gadcon_Client *gcc;
-   Ecore_Timer *timer;
-   Config_Item *ci;
    E_Gadcon_Popup *popup;
+   Config_Item *ci;
+#endif
+   Ecore_Timer *timer;
    Evas_Object *o_icon;
    Eo *main_box, *items_table, *no_conn_label, *error_label;
    Eina_List *items_list;
@@ -37,7 +43,6 @@ typedef struct
    Ecore_File_Monitor *torrents_dir_monitor;
 
    Eina_Bool reload : 1;
-
 } Instance;
 
 typedef struct
@@ -59,11 +64,14 @@ typedef struct
    Eina_Bool alive : 1;
 } Item_Desc;
 
+#ifndef STAND_ALONE
 static E_Config_DD *conf_edd = NULL;
 static E_Config_DD *conf_item_edd = NULL;
+#endif
 
 static Eina_List *instances = NULL;
 
+#ifndef STAND_ALONE
 Config *cpu_conf = NULL;
 
 static void
@@ -76,6 +84,7 @@ _menu_cb_post(void *data EINA_UNUSED, E_Menu *m EINA_UNUSED)
      e_object_del(E_OBJECT(cpu_conf->menu_interval));
    cpu_conf->menu_interval = NULL;
 }
+#endif
 
 static void
 _size_to_string(double size, const char *suffix, char *out)
@@ -334,6 +343,7 @@ _box_update(Instance *inst)
      }
 }
 
+#ifndef STAND_ALONE
 static void
 _popup_del(Instance *inst)
 {
@@ -439,6 +449,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 				 EVAS_BUTTON_NONE, ev->timestamp, NULL);
      }
 }
+#endif
 
 static Eina_Bool
 _torrent_add(Instance *inst, const char *file)
@@ -501,6 +512,29 @@ _torrents_dir_changed(void *data,
      }
 }
 
+static void
+_torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev)
+{
+   Instance *inst = efl_key_data_get(ev->object, "Transmission_Instance");
+   Eina_Stringshare *name = efl_key_data_get(ev->object, "Transmission_FileToRemove");
+   remove(name);
+   eina_stringshare_del(name);
+   _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
+}
+
+static Instance *
+_instance_create(void)
+{
+   Instance *inst = calloc(1, sizeof(Instance));
+   inst->ip_addr = "127.0.0.1";
+   inst->torrents_dir = "/home/daniel/Downloads";
+   inst->torrents_dir_monitor = ecore_file_monitor_add(inst->torrents_dir,
+         _torrents_dir_changed, inst);
+   instances = eina_list_append(instances, inst);
+   return inst;
+}
+
+#ifndef STAND_ALONE
 static E_Gadcon_Client *
 _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
 {
@@ -508,12 +542,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    E_Gadcon_Client *gcc;
    char buf[4096];
 
-   inst = E_NEW(Instance, 1);
-   inst->ip_addr = "127.0.0.1";
-   inst->torrents_dir = "/home/daniel/Downloads";
-   inst->torrents_dir_monitor = ecore_file_monitor_add(inst->torrents_dir,
-         _torrents_dir_changed, inst);
-
+   inst = _instance_create();
    snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
 
    inst->o_icon = edje_object_add(gc->evas);
@@ -526,27 +555,30 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    gcc = e_gadcon_client_new(gc, name, id, style, inst->o_icon);
    gcc->data = inst;
    inst->gcc = gcc;
-   instances = eina_list_append(instances, inst);
 
    evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
 				  _button_cb_mouse_down, inst);
 
    return gcc;
 }
+#endif
 
 static void
-_gc_shutdown(E_Gadcon_Client *gcc)
+_instance_delete(Instance *inst)
 {
-   Instance *inst;
-
-   inst = gcc->data;
-
    if (inst->timer) ecore_timer_del(inst->timer);
    if (inst->o_icon) evas_object_del(inst->o_icon);
    if (inst->main_box) evas_object_del(inst->main_box);
 
    instances = eina_list_remove(instances, inst);
-   E_FREE(inst);
+   free(inst);
+}
+
+#ifndef STAND_ALONE
+static void
+_gc_shutdown(E_Gadcon_Client *gcc)
+{
+   _instance_delete(gcc->data);
 }
 
 static void
@@ -584,19 +616,6 @@ _gc_id_new(const E_Gadcon_Client_Class *client_class)
    static int id = 0;
    sprintf(buf, "%s.%d", client_class->name, ++id);
    return eina_stringshare_add(buf);
-}
-
-#if 0
-static void
-_cpu_menu_fast(void *data, E_Menu *m EINA_UNUSED, E_Menu_Item *mi EINA_UNUSED)
-{
-   Instance *inst;
-
-   inst = data;
-   inst->ci->interval = 0.5;
-   ecore_timer_del(inst->timer);
-   inst->timer = ecore_timer_add(inst->ci->interval, _set_cpu_load, inst);
-   e_config_save_queue();
 }
 #endif
 
@@ -716,6 +735,7 @@ _jump_at(Lexer *l, ...)
    return EINA_TRUE;
 }
 
+#ifndef STAND_ALONE
 EAPI E_Module_Api e_modapi =
 {
    E_MODULE_API_VERSION, "Transmission"
@@ -729,6 +749,7 @@ static const E_Gadcon_Client_Class _gc_class =
    },
    E_GADCON_CLIENT_STYLE_PLAIN
 };
+#endif
 
 static Eina_Bool
 _session_id_get_cb(void *data EINA_UNUSED, int type EINA_UNUSED, void *event_info)
@@ -871,7 +892,7 @@ _json_data_parse(Instance *inst)
                        Item_Desc *d = _item_find_by_name(inst->items_list, name);
                        if (!d)
                          {
-                            d = E_NEW(Item_Desc, 1);
+                            d = calloc(1, sizeof(Item_Desc));
                             d->inst = inst;
                             d->id = id;
                             d->name = eina_stringshare_add(name);
@@ -906,7 +927,7 @@ _items_clear(Instance *inst)
              evas_object_del(inst->items_table);
              inst->items_list = eina_list_remove_list(inst->items_list, itr);
              inst->reload = EINA_TRUE;
-             E_FREE(d);
+             free(d);
           }
         else d->alive = EINA_FALSE;
      }
@@ -1003,6 +1024,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
    return EINA_TRUE;
 }
 
+#ifndef STAND_ALONE
 EAPI void *
 e_modapi_init(E_Module *m)
 {
@@ -1091,3 +1113,39 @@ e_modapi_save(E_Module *m EINA_UNUSED)
    e_config_domain_save("module.transmission", conf_edd, cpu_conf);
    return 1;
 }
+#endif
+
+#ifdef STAND_ALONE
+int main(int argc, char **argv)
+{
+   eina_init();
+   ecore_init();
+   ecore_con_init();
+   elm_init(argc, argv);
+   Instance *inst = _instance_create();
+
+   ecore_timer_add(1.0, _session_id_poller_cb, NULL);
+   ecore_timer_add(1.0, _torrents_poller_cb, NULL);
+   _session_id_poller_cb(NULL);
+
+   Eo *win = elm_win_add(NULL, "Transmission", ELM_WIN_BASIC);
+
+   Eo *o = elm_box_add(win);
+   evas_object_size_hint_align_set(o, EVAS_HINT_FILL, EVAS_HINT_FILL);
+   evas_object_size_hint_weight_set(o, EVAS_HINT_EXPAND, 0.0);
+   evas_object_show(o);
+   elm_win_resize_object_add(win, o);
+   efl_wref_add(o, &inst->main_box);
+
+   evas_object_resize(win, 480, 480);
+   evas_object_show(win);
+   elm_run();
+
+   _instance_delete(inst);
+   elm_shutdown();
+   ecore_con_shutdown();
+   ecore_shutdown();
+   eina_shutdown();
+   return 0;
+}
+#endif

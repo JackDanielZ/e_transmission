@@ -10,6 +10,9 @@ gcc -shared -fPIC -DPIC src/e_mod_main.o src/base64.o `pkg-config --libs enlight
 /opt/e/bin/edje_cc -v -id ./images transmission.edc transmission.edj
 [ $? -eq 0 ] || exit 1
 
+gcc -g src/e_mod_main.c src/base64.c -DSTAND_ALONE $CFLAGS `pkg-config --cflags --libs elementary` -o src/e_transmission
+[ $? -eq 0 ] || exit 1
+
 release=$(pkg-config --variable=release enlightenment)
 host_cpu=$(uname -m)
 MODULE_ARCH="linux-gnu-$host_cpu-$release"
