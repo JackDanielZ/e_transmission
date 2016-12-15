@@ -809,7 +809,7 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
 
-   if (!inst->session_id && inst->torrents_data_buf)
+   if (inst->torrents_data_len)
      {
         char *id = strstr(inst->torrents_data_buf, "X-Transmission-Session-Id: ");
         if (id)
@@ -817,10 +817,22 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
              char *end = strchr(id, '<');
              *end = '\0';
              id = strchr(id, ' ') + 1;
-             inst->session_id = strdup(id);
-             printf("%s\n", inst->session_id);
+             if (!inst->session_id || !strcmp(inst->session_id, id))
+               {
+                  free(inst->session_id);
+                  inst->session_id = strdup(id);
+                  printf("New Id: %s\n", inst->session_id);
+               }
           }
         _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
+     }
+   else
+     {
+        if (inst->session_id)
+          {
+             free(inst->session_id);
+             inst->session_id = NULL;
+          }
      }
    inst->torrents_data_len = 0;
 }
