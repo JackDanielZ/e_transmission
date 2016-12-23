@@ -46,7 +46,8 @@ typedef struct
 {
    Instance *inst;
    const char *name;
-   unsigned int size, downrate, uprate, id, status;
+   unsigned long size;
+   unsigned int downrate, uprate, id, status;
    double done, ratio;
 
    int table_idx;
@@ -731,7 +732,7 @@ _next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
    return word;
 }
 
-static int
+static long
 _next_integer(Lexer *l)
 {
    _ws_skip(l);
@@ -743,7 +744,7 @@ _next_integer(Lexer *l)
    memcpy(n_str, l->current, size);
    n_str[size] = '\0';
    l->current = str;
-   return atoi(n_str);
+   return atol(n_str);
 }
 
 static double
@@ -879,8 +880,8 @@ _json_data_parse(Instance *inst)
              while (!_is_next_token(&l, "]"))
                {
                   char *name = NULL;
-                  int leftuntildone = 0, id = 0, status = 0, uprate = 0, downrate = 0;
-                  unsigned int size = 0;
+                  long leftuntildone = 0, id = 0, status = 0, uprate = 0, downrate = 0;
+                  unsigned long size = 0;
                   double ratio = 0.0;
                   if (!_is_next_token(&l, "{")) return EINA_FALSE;
                   while (!_is_next_token(&l, "}"))
