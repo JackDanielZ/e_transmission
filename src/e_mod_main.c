@@ -818,7 +818,7 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
              char *end = strchr(id, '<');
              *end = '\0';
              id = strchr(id, ' ') + 1;
-             if (!inst->session_id || !strcmp(inst->session_id, id))
+             if (!inst->session_id || strcmp(inst->session_id, id))
                {
                   free(inst->session_id);
                   inst->session_id = strdup(id);
