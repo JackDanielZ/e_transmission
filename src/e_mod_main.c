@@ -891,7 +891,11 @@ _json_data_parse(Instance *inst)
                     {
                        if (_is_next_token(&l, "\"name\":\""))
                          {
-                            name = _next_word(&l, ".[]_- ", EINA_TRUE);
+                            const char *begin = l.current;
+                            JUMP_AT(&l, "\"", EINA_FALSE);
+                            name = malloc(l.current - begin + 1);
+                            memcpy(name, begin, l.current - begin);
+                            name[l.current - begin] = '\0';
                             JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
                        else if (_is_next_token(&l, "\"id\":"))
