@@ -438,6 +438,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 
    inst = data;
    ev = event_info;
+   printf("TRANS: In - %s\n", __FUNCTION__);
    if (ev->button == 1)
      {
         if (!inst->popup)
@@ -610,6 +611,7 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    E_Gadcon_Client *gcc;
    char buf[4096];
 
+   printf("TRANS: In - %s\n", __FUNCTION__);
    inst = _instance_create();
    snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(cpu_conf->module));
 
@@ -646,6 +648,7 @@ _instance_delete(Instance *inst)
 static void
 _gc_shutdown(E_Gadcon_Client *gcc)
 {
+   printf("TRANS: In - %s\n", __FUNCTION__);
    _instance_delete(gcc->data);
 }
 
@@ -824,6 +827,7 @@ static const E_Gadcon_Client_Class _gc_class =
 static void
 _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
+   printf("TRANS: In - %s\n", __FUNCTION__);
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
 
@@ -860,6 +864,7 @@ _session_id_poller_cb(void *data EINA_UNUSED)
 {
    Eina_List *itr;
    Instance *inst;
+   printf("TRANS: In - %s\n", __FUNCTION__);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
         char url[1024];
@@ -1004,6 +1009,7 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
    char *result_str = strstr(inst->torrents_data_buf, "\"result\":");
+   printf("TRANS: In - %s\n", __FUNCTION__);
    if (!result_str) return;
    if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
      {
@@ -1027,6 +1033,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
    Eina_List *itr;
    Instance *inst;
    const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   printf("TRANS: In - %s\n", __FUNCTION__);
    EINA_LIST_FOREACH(instances, itr, inst)
      {
         char url[1024];
@@ -1049,6 +1056,7 @@ _torrents_poller_cb(void *data EINA_UNUSED)
 EAPI void *
 e_modapi_init(E_Module *m)
 {
+   printf("TRANS: In - %s\n", __FUNCTION__);
    ecore_init();
    ecore_con_init();
    ecore_con_url_init();
@@ -1096,6 +1104,7 @@ e_modapi_init(E_Module *m)
 EAPI int
 e_modapi_shutdown(E_Module *m EINA_UNUSED)
 {
+   printf("TRANS: In - %s\n", __FUNCTION__);
    ecore_timer_del(_session_id_timer);
    ecore_timer_del(_torrents_poller_timer);
    cpu_conf->module = NULL;
