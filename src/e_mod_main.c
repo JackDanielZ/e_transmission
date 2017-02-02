@@ -714,6 +714,7 @@ _is_next_token(Lexer *l, const char *token)
    return EINA_FALSE;
 }
 
+#if 0
 static char *
 _next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
 {
@@ -734,6 +735,7 @@ _next_word(Lexer *l, const char *special, Eina_Bool special_allowed)
    l->current = str;
    return word;
 }
+#endif
 
 static long
 _next_integer(Lexer *l)
