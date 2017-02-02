@@ -195,6 +195,15 @@ ret:
    efl_key_data_set(dialer, "can_read_changed", NULL);
 }
 
+static void
+_dialer_delete(void *data EINA_UNUSED, const Efl_Event *ev)
+{
+   Eo *dialer = ev->object;
+   efl_del(efl_key_data_get(dialer, "post-buffer"));
+   efl_del(efl_key_data_get(dialer, "copier-buffer-dialer"));
+   efl_del(dialer);
+}
+
 static Efl_Net_Dialer_Http *
 _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
 {
@@ -205,6 +214,7 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
          efl_event_callback_add(efl_added, EFL_IO_READER_EVENT_CAN_READ_CHANGED, _can_read_changed, NULL));
    if (cb)
       efl_event_callback_add(dialer, EFL_IO_READER_EVENT_EOS, cb, NULL);
+   efl_event_callback_add(dialer, EFL_IO_READER_EVENT_EOS, _dialer_delete, NULL);
 
    if (!is_get_method && data)
      {
@@ -214,12 +224,14 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
               efl_io_closer_close_on_destructor_set(efl_added, EINA_TRUE),
               efl_io_closer_close_on_exec_set(efl_added, EINA_TRUE));
         efl_io_writer_write(buffer, &slice, NULL);
+        efl_key_data_set(dialer, "post-buffer", buffer);
 
-        efl_add(EFL_IO_COPIER_CLASS, efl_loop_get(dialer),
+        Eo *copier = efl_add(EFL_IO_COPIER_CLASS, efl_loop_get(dialer),
               efl_name_set(efl_added, "copier-buffer-dialer"),
               efl_io_copier_source_set(efl_added, buffer),
               efl_io_copier_destination_set(efl_added, dialer),
               efl_io_closer_close_on_destructor_set(efl_added, EINA_FALSE));
+        efl_key_data_set(dialer, "copier-buffer-dialer", copier);
      }
 
    return dialer;
