@@ -532,7 +532,11 @@ _torrent_add(Instance *inst, const char *file)
 
    sprintf(full_path, "%s/%s", inst->torrents_dir, file);
    FILE *fp = fopen(full_path, "rb");
-   if (!fp) goto end;
+   if (!fp)
+     {
+        printf("Can't open file %s\n", full_path);
+        goto end;
+     }
    fseek(fp, 0, SEEK_END);
    filesize = ftell(fp);
    if (filesize < 0) goto end;
@@ -540,7 +544,6 @@ _torrent_add(Instance *inst, const char *file)
    content = malloc(filesize + 1);
    if (fread(content, filesize, 1, fp) != 1) goto end;
    content[filesize] = '\0';
-   fclose(fp);
 
    ret_content = base64_encode(content, filesize, &retsize);
    request = malloc(retsize + 256);
@@ -555,6 +558,7 @@ _torrent_add(Instance *inst, const char *file)
    efl_net_dialer_dial(dialer, url);
    ret = EINA_TRUE;
 end:
+   fclose(fp);
    free(content);
    free(ret_content);
    free(request);
@@ -843,10 +847,10 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
                {
                   free(inst->session_id);
                   inst->session_id = strdup(id);
+                  _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
                   printf("New Id: %s\n", inst->session_id);
                }
           }
-        _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
      }
    else
      {
