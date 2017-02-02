@@ -13,6 +13,9 @@
 
 static const char *baseUrl = "http://%s:9091/transmission/rpc";
 
+static Ecore_Timer *_session_id_timer = NULL;
+static Ecore_Timer *_torrents_poller_timer = NULL;
+
 typedef struct
 {
    const char *buffer;
@@ -1066,8 +1069,8 @@ e_modapi_init(E_Module *m)
    cpu_conf->module = m;
    e_gadcon_provider_register(&_gc_class);
 
-   ecore_timer_add(1.0, _session_id_poller_cb, NULL);
-   ecore_timer_add(1.0, _torrents_poller_cb, NULL);
+   _session_id_timer = ecore_timer_add(1.0, _session_id_poller_cb, NULL);
+   _torrents_poller_timer = ecore_timer_add(1.0, _torrents_poller_cb, NULL);
    _session_id_poller_cb(NULL);
    return m;
 }
@@ -1075,6 +1078,8 @@ e_modapi_init(E_Module *m)
 EAPI int
 e_modapi_shutdown(E_Module *m EINA_UNUSED)
 {
+   ecore_timer_del(_session_id_timer);
+   ecore_timer_del(_torrents_poller_timer);
    cpu_conf->module = NULL;
    e_gadcon_provider_unregister(&_gc_class);
    if (cpu_conf->config_dialog)
@@ -1121,8 +1126,8 @@ int main(int argc, char **argv)
    elm_init(argc, argv);
    Instance *inst = _instance_create();
 
-   ecore_timer_add(1.0, _session_id_poller_cb, NULL);
-   ecore_timer_add(1.0, _torrents_poller_cb, NULL);
+   _session_id_timer = ecore_timer_add(1.0, _session_id_poller_cb, NULL);
+   _torrents_poller_timer = ecore_timer_add(1.0, _torrents_poller_cb, NULL);
    _session_id_poller_cb(NULL);
 
    Eo *win = elm_win_add(NULL, "Transmission", ELM_WIN_BASIC);
@@ -1137,6 +1142,9 @@ int main(int argc, char **argv)
    evas_object_resize(win, 480, 480);
    evas_object_show(win);
    elm_run();
+
+   ecore_timer_del(_session_id_timer);
+   ecore_timer_del(_torrents_poller_timer);
 
    _instance_delete(inst);
    elm_shutdown();
