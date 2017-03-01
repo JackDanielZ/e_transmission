@@ -526,12 +526,13 @@ _torrent_add(Instance *inst, const char *file)
 {
    char url[1024], full_path[256];
    char *content = NULL, *ret_content = NULL, *request = NULL;
+   FILE *fp = NULL;
    int filesize, retsize;
    Eina_Bool ret = EINA_FALSE;
    if (!inst->session_id) goto end;
 
    sprintf(full_path, "%s/%s", inst->torrents_dir, file);
-   FILE *fp = fopen(full_path, "rb");
+   fp = fopen(full_path, "rb");
    if (!fp)
      {
         printf("Can't open file %s\n", full_path);
@@ -558,7 +559,7 @@ _torrent_add(Instance *inst, const char *file)
    efl_net_dialer_dial(dialer, url);
    ret = EINA_TRUE;
 end:
-   fclose(fp);
+   if (fp) fclose(fp);
    free(content);
    free(ret_content);
    free(request);
