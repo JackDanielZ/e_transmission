@@ -1,3 +1,4 @@
+# Module
 gcc -fPIC -g -c src/e_mod_main.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/e_mod_main.o
 [ $? -eq 0 ] || exit 1
 gcc -fPIC -c src/base64.c $CFLAGS `pkg-config --cflags enlightenment elementary` -o src/base64.o
@@ -5,11 +6,13 @@ gcc -fPIC -c src/base64.c $CFLAGS `pkg-config --cflags enlightenment elementary`
 gcc -shared -fPIC -DPIC src/e_mod_main.o src/base64.o `pkg-config --libs enlightenment elementary` -Wl,-soname -Wl,module.so -o src/module.so
 [ $? -eq 0 ] || exit 1
 
+#Edje
 /opt/e/bin/edje_cc -v -id ./images e-module-transmission.edc e-module-transmission.edj
 [ $? -eq 0 ] || exit 1
 /opt/e/bin/edje_cc -v -id ./images transmission.edc transmission.edj
 [ $? -eq 0 ] || exit 1
 
+# Test app
 gcc -g src/e_mod_main.c src/base64.c -DSTAND_ALONE $CFLAGS `pkg-config --cflags --libs elementary` -o src/e_transmission
 [ $? -eq 0 ] || exit 1
 
