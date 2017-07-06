@@ -794,6 +794,39 @@ _json_data_parse(Instance *inst)
                             ratio = _next_double(&l);
                             JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                          }
+                       else if (_is_next_token(&l, "\"files\":["))
+                         {
+                            while (!_is_next_token(&l, "]"))
+                              {
+                                 if (!_is_next_token(&l, "{")) return EINA_FALSE;
+                                 while (!_is_next_token(&l, "}"))
+                                   {
+                                      if (_is_next_token(&l, "\"bytesCompleted\":"))
+                                        {
+                                           int s = _next_integer(&l);
+                                           JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
+                                        }
+                                      else if (_is_next_token(&l, "\"length\":"))
+                                        {
+                                           int s = _next_integer(&l);
+                                           JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
+                                        }
+                                      else if (_is_next_token(&l, "\"name\":"))
+                                        {
+                                           const char *begin = l.current;
+                                           JUMP_AT(&l, "\"", EINA_FALSE);
+#if 0
+                                           name = malloc(l.current - begin + 1);
+                                           memcpy(name, begin, l.current - begin);
+                                           name[l.current - begin] = '\0';
+#endif
+                                           JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
+                                        }
+                                   }
+                                 _is_next_token(&l, ",");
+                              }
+                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
+                         }
                        else
                          {
                             if (!JUMP_AT(&l, "}", EINA_FALSE)) return EINA_FALSE;
@@ -873,7 +906,7 @@ static Eina_Bool
 _torrents_poller_cb(void *data)
 {
    Instance *inst = data;
-   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\"]}, \"method\":\"torrent-get\"}";
+   const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\", \"files\"]}, \"method\":\"torrent-get\"}";
    printf("TRANS: In - %s\n", __FUNCTION__);
    char url[1024];
    if (!inst->session_id)
