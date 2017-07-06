@@ -59,6 +59,7 @@ typedef struct
    Eo *downrate_label, *uprate_label, *ratio_label;
    Eo *start_button, *start_icon, *pause_icon;
    Eo *del_button, *del_icon;
+   Eo *download_button, *download_icon;
 
    Eina_Bool alive : 1;
 } Item_Desc;
@@ -105,6 +106,7 @@ enum
    UPRATE_COL,
    RATIO_COL,
    PLAY_COL,
+   DOWNLOAD_COL,
    DEL_COL,
 };
 
@@ -265,6 +267,14 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
    efl_net_dialer_dial(dialer, url);
+}
+
+static void
+_download_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+   Item_Desc *d = data;
+   Instance *inst = d->inst;
+   if (!inst->session_id) return;
 }
 
 static void
@@ -491,6 +501,10 @@ _box_update(Instance *inst)
         _icon_create(inst->items_table, "media-playback-pause", &d->pause_icon);
         _button_create(inst->items_table, NULL, d->status ? d->pause_icon : d->start_icon, &d->start_button, _start_pause_bt_clicked, d);
         elm_table_pack(inst->items_table, d->start_button, PLAY_COL, d->table_idx, 1, 1);
+
+        _icon_create(inst->items_table, "go-down", &d->download_icon);
+        _button_create(inst->items_table, NULL, d->download_icon, &d->download_button, _download_bt_clicked, d);
+        elm_table_pack(inst->items_table, d->download_button, DOWNLOAD_COL, d->table_idx, 1, 1);
 
         _icon_create(inst->items_table, "application-exit", &d->del_icon);
         _button_create(inst->items_table, NULL, d->del_icon, &d->del_button, _del_bt_clicked, d);
