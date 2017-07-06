@@ -23,6 +23,19 @@ typedef struct
 
 typedef struct
 {
+   const char *hostname;
+   const char *torrents_dir;
+   const char *download_server;
+   const char *remote_dir;
+} Server_Config;
+
+typedef struct
+{
+   Eina_List *servers_cfgs;
+} Config;
+
+typedef struct
+{
 #ifndef STAND_ALONE
    E_Gadcon_Client *gcc;
    E_Gadcon_Popup *popup;
@@ -38,11 +51,18 @@ typedef struct
    unsigned int torrents_data_buf_len;
    unsigned int torrents_data_len;
 
-   Eina_Stringshare *ip_addr, *torrents_dir;
+   const Server_Config *scfg;
    Ecore_File_Monitor *torrents_dir_monitor;
 
    Eina_Bool reload : 1;
 } Instance;
+
+typedef struct
+{
+   char *full_name;
+   unsigned int cur_len;
+   unsigned int total_len;
+} File_Info;
 
 typedef struct
 {
@@ -51,6 +71,7 @@ typedef struct
    unsigned long size;
    unsigned int downrate, uprate, id, status;
    double done, ratio;
+   Eina_List *files; /* List of File_Info */
 
    int table_idx;
    Eo *name_label;
@@ -63,17 +84,6 @@ typedef struct
 
    Eina_Bool alive : 1;
 } Item_Desc;
-
-typedef struct
-{
-   const char *hostname;
-   const char *torrents_dir;
-} Server_Config;
-
-typedef struct
-{
-   Eina_List *servers_cfgs;
-} Config;
 
 static Eet_Data_Descriptor *_config_edd = NULL;
 
@@ -243,7 +253,7 @@ _start_pause_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_in
    if (!inst->session_id) return;
    sprintf(request, "{\"method\":\"torrent-%s\", \"arguments\":{\"ids\":[%d]}}",
          d->status ? "stop" : "start", d->id);
-   sprintf(url, baseUrl, inst->ip_addr);
+   sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, NULL);
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
@@ -262,7 +272,7 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
          "{\"method\":\"torrent-remove\", "
          "\"arguments\":{\"ids\":[%d],\"delete-local-data\":true}}",
          d->id);
-   sprintf(url, baseUrl, inst->ip_addr);
+   sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, NULL);
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
@@ -270,11 +280,68 @@ _del_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_
 }
 
 static void
-_download_bt_clicked(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+_download_tooltip_show(void *data EINA_UNUSED, Evas *e EINA_UNUSED, Evas_Object *obj, void *event_info EINA_UNUSED)
+{
+   elm_object_tooltip_show(obj);
+}
+
+static void
+_download_tooltip_hide(void *data EINA_UNUSED, Evas *e EINA_UNUSED, Evas_Object *obj, void *event_info EINA_UNUSED)
+{
+   elm_object_tooltip_hide(obj);
+}
+
+static Eina_Bool
+_rsync_end_cb(void *data, int type EINA_UNUSED, void *event)
+{
+   Ecore_Exe_Event_Del *event_info = (Ecore_Exe_Event_Del *)event;
+   Ecore_Exe *exe = event_info->exe;
+   Item_Desc *d = ecore_exe_data_get(exe);
+   if (!d || d->inst != data) return ECORE_CALLBACK_PASS_ON;
+
+   elm_object_disabled_set(d->download_button, EINA_FALSE);
+   elm_object_tooltip_text_set(d->download_button, NULL);
+   elm_object_tooltip_hide(d->download_button);
+   evas_object_event_callback_del_full(d->download_button, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
+   evas_object_event_callback_del_full(d->download_button, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+   return ECORE_CALLBACK_DONE;
+}
+
+static Eina_Bool
+_rsync_output_cb(void *data, int type EINA_UNUSED, void *event)
+{
+   Ecore_Exe_Event_Data *event_data = (Ecore_Exe_Event_Data *)event;
+   const char *begin = event_data->data;
+   Ecore_Exe *exe = event_data->exe;
+   Item_Desc *d = ecore_exe_data_get(exe);
+   if (!d || d->inst != data) return ECORE_CALLBACK_PASS_ON;
+
+   while (*begin == 0xd || *begin == ' ') begin++;
+   elm_object_tooltip_text_set(d->download_button, begin);
+
+   return ECORE_CALLBACK_DONE;
+}
+
+static void
+_download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
 {
    Item_Desc *d = data;
    Instance *inst = d->inst;
    if (!inst->session_id) return;
+   if (eina_list_count(d->files) == 1)
+     {
+        char cmd[1024];
+        File_Info *info = eina_list_data_get(d->files);
+        sprintf(cmd, "rsync -avzhP --protect-args --inplace %s:%s/\"%s\" /home/daniel/Desktop/Downloads",
+              inst->scfg->download_server, inst->scfg->remote_dir, info->full_name);
+        ecore_exe_pipe_run(cmd, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, d);
+        elm_object_disabled_set(obj, EINA_TRUE);
+        elm_object_tooltip_text_set(obj, "");
+        elm_object_tooltip_show(obj);
+        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
+        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+        printf("Download %s\n", info->full_name);
+     }
 }
 
 static void
@@ -525,7 +592,7 @@ _torrent_add(Instance *inst, const char *file)
    Eina_Bool ret = EINA_FALSE;
    if (!inst->session_id) goto end;
 
-   sprintf(full_path, "%s/%s", inst->torrents_dir, file);
+   sprintf(full_path, "%s/%s", inst->scfg->torrents_dir, file);
    fp = fopen(full_path, "rb");
    if (!fp)
      {
@@ -545,7 +612,7 @@ _torrent_add(Instance *inst, const char *file)
    sprintf(request,
          "{\"method\":\"torrent-add\", "
          "\"arguments\":{\"metainfo\":\"%s\"}}", ret_content);
-   sprintf(url, baseUrl, inst->ip_addr);
+   sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, _torrent_added_cb);
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
@@ -566,7 +633,7 @@ _torrents_dir_changed(void *data,
       Ecore_File_Event event EINA_UNUSED, const char *path EINA_UNUSED)
 {
    Instance *inst = data;
-   Eina_List *l = ecore_file_ls(inst->torrents_dir);
+   Eina_List *l = ecore_file_ls(inst->scfg->torrents_dir);
    char *file;
    Eina_Bool stop = EINA_FALSE;
    EINA_LIST_FREE(l, file)
@@ -591,12 +658,11 @@ _torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 }
 
 static Instance *
-_instance_create(const char *hostname, const char *torrents_dir)
+_instance_create(const Server_Config *scfg)
 {
    Instance *inst = calloc(1, sizeof(Instance));
-   inst->ip_addr = hostname;
-   inst->torrents_dir = torrents_dir;
-   inst->torrents_dir_monitor = ecore_file_monitor_add(inst->torrents_dir,
+   inst->scfg = scfg;
+   inst->torrents_dir_monitor = ecore_file_monitor_add(inst->scfg->torrents_dir,
          _torrents_dir_changed, inst);
    return inst;
 }
@@ -612,6 +678,8 @@ _config_eet_load()
    srv_edd = eet_data_descriptor_stream_new(&eddc);
    EET_DATA_DESCRIPTOR_ADD_BASIC(srv_edd, Server_Config, "hostname", hostname, EET_T_STRING);
    EET_DATA_DESCRIPTOR_ADD_BASIC(srv_edd, Server_Config, "torrents_dir", torrents_dir, EET_T_STRING);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(srv_edd, Server_Config, "download_server", download_server, EET_T_STRING);
+   EET_DATA_DESCRIPTOR_ADD_BASIC(srv_edd, Server_Config, "remote_dir", remote_dir, EET_T_STRING);
 
    EET_EINA_STREAM_DATA_DESCRIPTOR_CLASS_SET(&eddc, Config);
    _config_edd = eet_data_descriptor_stream_new(&eddc);
@@ -662,6 +730,8 @@ _config_load()
         Server_Config *scfg = calloc(1, sizeof(*scfg));
         scfg->hostname = "127.0.0.1";
         scfg->torrents_dir = "/home/daniel/Downloads";
+        scfg->download_server = "127.0.0.1";
+        scfg->remote_dir = "/home/daniel/Downloads";
         _config->servers_cfgs = eina_list_append(_config->servers_cfgs, scfg);
      }
    else
@@ -676,7 +746,7 @@ _config_load()
 static void
 _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
 
@@ -712,9 +782,9 @@ static Eina_Bool
 _session_id_poller_cb(void *data)
 {
    Instance *inst = data;
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    char url[1024];
-   sprintf(url, baseUrl, inst->ip_addr);
+   sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_TRUE, NULL, _session_id_get_cb);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
    efl_net_dialer_dial(dialer, url);
@@ -758,6 +828,7 @@ _json_data_parse(Instance *inst)
              while (!_is_next_token(&l, "]"))
                {
                   char *name = NULL;
+                  Eina_List *files_info = NULL;
                   long leftuntildone = 0, id = 0, status = 0, uprate = 0, downrate = 0;
                   unsigned long size = 0;
                   double ratio = 0.0;
@@ -813,30 +884,36 @@ _json_data_parse(Instance *inst)
                             while (!_is_next_token(&l, "]"))
                               {
                                  if (!_is_next_token(&l, "{")) return EINA_FALSE;
+                                 unsigned int cur = 0, total = 0;
+                                 char *filename = NULL;
+                                 File_Info *info;
                                  while (!_is_next_token(&l, "}"))
                                    {
                                       if (_is_next_token(&l, "\"bytesCompleted\":"))
                                         {
-                                           int s = _next_integer(&l);
+                                           cur = _next_integer(&l);
                                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                                         }
                                       else if (_is_next_token(&l, "\"length\":"))
                                         {
-                                           int s = _next_integer(&l);
+                                           total = _next_integer(&l);
                                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                                         }
-                                      else if (_is_next_token(&l, "\"name\":"))
+                                      else if (_is_next_token(&l, "\"name\":\""))
                                         {
                                            const char *begin = l.current;
                                            JUMP_AT(&l, "\"", EINA_FALSE);
-#if 0
-                                           name = malloc(l.current - begin + 1);
-                                           memcpy(name, begin, l.current - begin);
-                                           name[l.current - begin] = '\0';
-#endif
+                                           filename = malloc(l.current - begin + 1);
+                                           memcpy(filename, begin, l.current - begin);
+                                           filename[l.current - begin] = '\0';
                                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                                         }
                                    }
+                                 info = malloc(sizeof(*info));
+                                 info->cur_len = cur;
+                                 info->total_len = total;
+                                 info->full_name = filename;
+                                 files_info = eina_list_append(files_info, info);
                                  _is_next_token(&l, ",");
                               }
                             JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
@@ -849,6 +926,7 @@ _json_data_parse(Instance *inst)
                   if (id)
                     {
                        Item_Desc *d = _item_find_by_name(inst->items_list, name);
+                       File_Info *info;
                        if (!d)
                          {
                             d = calloc(1, sizeof(Item_Desc));
@@ -858,6 +936,11 @@ _json_data_parse(Instance *inst)
                             inst->items_list = eina_list_append(inst->items_list, d);
                             inst->reload = EINA_TRUE;
                          }
+                       EINA_LIST_FREE(d->files, info)
+                         {
+                            free(info->full_name);
+                            free(info);
+                         }
                        d->alive = EINA_TRUE;
                        d->size = size;
                        d->downrate = downrate;
@@ -865,6 +948,7 @@ _json_data_parse(Instance *inst)
                        d->ratio = ratio;
                        d->status = status;
                        d->done = 100.0 - (100 * ((double)leftuntildone / size));
+                       d->files = files_info;
                        free(name);
                     }
                   _is_next_token(&l, ",");
@@ -898,7 +982,7 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
    char *result_str = strstr(inst->torrents_data_buf, "\"result\":");
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    if (!result_str) return;
    if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
      {
@@ -921,7 +1005,7 @@ _torrents_poller_cb(void *data)
 {
    Instance *inst = data;
    const char *fields_list = "{\"arguments\":{\"fields\":[\"name\", \"status\", \"id\", \"leftUntilDone\", \"rateDownload\", \"rateUpload\", \"sizeWhenDone\", \"uploadRatio\", \"files\"]}, \"method\":\"torrent-get\"}";
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    char url[1024];
    if (!inst->session_id)
      {
@@ -929,7 +1013,7 @@ _torrents_poller_cb(void *data)
         _box_update(inst);
         return EINA_TRUE;
      }
-   sprintf(url, baseUrl, inst->ip_addr);
+   sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, fields_list, _torrents_stats_get_cb);
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
@@ -966,7 +1050,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
 
    inst = data;
    ev = event_info;
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    if (ev->button == 1)
      {
         if (!inst->popup)
@@ -1000,10 +1084,10 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    E_Gadcon_Client *gcc;
    char buf[4096];
 
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
 
    scfg = eina_list_data_get(_config->servers_cfgs);
-   inst = _instance_create(scfg->hostname, scfg->torrents_dir);
+   inst = _instance_create(scfg);
 
    snprintf(buf, sizeof(buf), "%s/transmission.edj", e_module_dir_get(_module));
 
@@ -1025,13 +1109,16 @@ _gc_init(E_Gadcon *gc, const char *name, const char *id, const char *style)
    evas_object_event_callback_add(inst->o_icon, EVAS_CALLBACK_MOUSE_DOWN,
 				  _button_cb_mouse_down, inst);
 
+   ecore_event_handler_add(ECORE_EXE_EVENT_DATA, _rsync_output_cb, inst);
+   ecore_event_handler_add(ECORE_EXE_EVENT_DEL, _rsync_end_cb, inst);
+
    return gcc;
 }
 
 static void
 _gc_shutdown(E_Gadcon_Client *gcc)
 {
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    _instance_delete(gcc->data);
 }
 
@@ -1089,7 +1176,7 @@ static const E_Gadcon_Client_Class _gc_class =
 EAPI void *
 e_modapi_init(E_Module *m)
 {
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    ecore_init();
    ecore_con_init();
    ecore_con_url_init();
@@ -1105,7 +1192,7 @@ e_modapi_init(E_Module *m)
 EAPI int
 e_modapi_shutdown(E_Module *m EINA_UNUSED)
 {
-   printf("TRANS: In - %s\n", __FUNCTION__);
+//   printf("TRANS: In - %s\n", __FUNCTION__);
    e_gadcon_provider_unregister(&_gc_class);
 
    _module = NULL;
@@ -1136,7 +1223,7 @@ int main(int argc, char **argv)
 
    _config_load();
    scfg = eina_list_data_get(_config->servers_cfgs);
-   inst = _instance_create(scfg->hostname, scfg->torrents_dir);
+   inst = _instance_create(scfg);
 
    inst->session_id_timer = ecore_timer_add(1.0, _session_id_poller_cb, inst);
    inst->torrents_poller_timer = ecore_timer_add(1.0, _torrents_poller_cb, inst);
@@ -1153,6 +1240,10 @@ int main(int argc, char **argv)
 
    evas_object_resize(win, 480, 480);
    evas_object_show(win);
+
+   ecore_event_handler_add(ECORE_EXE_EVENT_DATA, _rsync_output_cb, inst);
+   ecore_event_handler_add(ECORE_EXE_EVENT_DEL, _rsync_end_cb, inst);
+
    elm_run();
 
    _instance_delete(inst);
