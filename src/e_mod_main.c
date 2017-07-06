@@ -82,6 +82,7 @@ typedef struct
    Eo *del_button, *del_icon;
    Eo *download_button, *download_icon;
 
+   Eo *download_exe;
    Eina_Bool alive : 1;
 } Item_Desc;
 
@@ -291,6 +292,24 @@ _download_tooltip_hide(void *data EINA_UNUSED, Evas *e EINA_UNUSED, Evas_Object 
    elm_object_tooltip_hide(obj);
 }
 
+static void
+_tooltip_enable(Eo *obj, Eina_Bool enable)
+{
+   elm_object_disabled_set(obj, enable);
+   if (enable)
+     {
+        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
+        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+     }
+   else
+     {
+        elm_object_tooltip_text_set(obj, NULL);
+        elm_object_tooltip_hide(obj);
+        evas_object_event_callback_del_full(obj, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
+        evas_object_event_callback_del_full(obj, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+     }
+}
+
 static Eina_Bool
 _rsync_end_cb(void *data, int type EINA_UNUSED, void *event)
 {
@@ -298,12 +317,7 @@ _rsync_end_cb(void *data, int type EINA_UNUSED, void *event)
    Ecore_Exe *exe = event_info->exe;
    Item_Desc *d = ecore_exe_data_get(exe);
    if (!d || d->inst != data) return ECORE_CALLBACK_PASS_ON;
-
-   elm_object_disabled_set(d->download_button, EINA_FALSE);
-   elm_object_tooltip_text_set(d->download_button, NULL);
-   elm_object_tooltip_hide(d->download_button);
-   evas_object_event_callback_del_full(d->download_button, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
-   evas_object_event_callback_del_full(d->download_button, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+   _tooltip_enable(d->download_button, EINA_FALSE);
    return ECORE_CALLBACK_DONE;
 }
 
@@ -334,12 +348,11 @@ _download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
         File_Info *info = eina_list_data_get(d->files);
         sprintf(cmd, "rsync -avzhP --protect-args --inplace %s:%s/\"%s\" /home/daniel/Desktop/Downloads",
               inst->scfg->download_server, inst->scfg->remote_dir, info->full_name);
-        ecore_exe_pipe_run(cmd, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, d);
-        elm_object_disabled_set(obj, EINA_TRUE);
+        d->download_exe = ecore_exe_pipe_run(cmd, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, d);
+        efl_wref_add(d->download_exe, &(d->download_exe));
         elm_object_tooltip_text_set(obj, "");
         elm_object_tooltip_show(obj);
-        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_IN, _download_tooltip_show, NULL);
-        evas_object_event_callback_add(obj, EVAS_CALLBACK_MOUSE_OUT, _download_tooltip_hide, NULL);
+        _tooltip_enable(obj, EINA_TRUE);
         printf("Download %s\n", info->full_name);
      }
 }
@@ -572,6 +585,7 @@ _box_update(Instance *inst)
         _icon_create(inst->items_table, "go-down", &d->download_icon);
         _button_create(inst->items_table, NULL, d->download_icon, &d->download_button, _download_bt_clicked, d);
         elm_table_pack(inst->items_table, d->download_button, DOWNLOAD_COL, d->table_idx, 1, 1);
+        if (d->download_exe) _tooltip_enable(d->download_button, EINA_TRUE);
 
         _icon_create(inst->items_table, "application-exit", &d->del_icon);
         _button_create(inst->items_table, NULL, d->del_icon, &d->del_button, _del_bt_clicked, d);
