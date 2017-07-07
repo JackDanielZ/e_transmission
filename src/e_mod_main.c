@@ -951,7 +951,6 @@ _json_data_parse(Instance *inst)
                        File_Info *info;
                        if (!d)
                          {
-                            printf("New item\n");
                             d = calloc(1, sizeof(Item_Desc));
                             d->inst = inst;
                             d->id = id;
