@@ -53,8 +53,6 @@ typedef struct
 
    const Server_Config *scfg;
    Ecore_File_Monitor *torrents_dir_monitor;
-
-   Eina_Bool clear : 1;
 } Instance;
 
 typedef struct
@@ -477,7 +475,7 @@ _jump_at(Lexer *l, ...)
 }
 
 static void
-_box_update(Instance *inst)
+_box_update(Instance *inst, Eina_Bool clear)
 {
    char str[128];;
    Eina_List *itr, *itr2;
@@ -485,9 +483,8 @@ _box_update(Instance *inst)
 
    if (!inst->main_box) return;
 
-   if (inst->clear)
+   if (clear)
      {
-        inst->clear = EINA_FALSE;
         elm_box_clear(inst->main_box);
         _label_create(inst->main_box, "No connection", &inst->no_conn_label);
         elm_box_pack_end(inst->main_box, inst->no_conn_label);
@@ -1001,7 +998,7 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    else
      {
         _json_data_parse(inst);
-        _box_update(inst);
+        _box_update(inst, EINA_FALSE);
      }
    inst->torrents_data_len = 0;
 }
@@ -1015,8 +1012,7 @@ _torrents_poller_cb(void *data)
    char url[1024];
    if (!inst->session_id)
      {
-        inst->clear = EINA_TRUE;
-        _box_update(inst);
+        _box_update(inst, EINA_TRUE);
         return EINA_TRUE;
      }
    sprintf(url, baseUrl, inst->scfg->hostname);
@@ -1070,7 +1066,7 @@ _button_cb_mouse_down(void *data, Evas *e EINA_UNUSED, Evas_Object *obj EINA_UNU
              evas_object_show(o);
              efl_wref_add(o, &inst->main_box);
 
-             _box_update(inst);
+             _box_update(inst, EINA_FALSE);
 
              e_gadcon_popup_content_set(inst->popup, inst->main_box);
              e_comp_object_util_autoclose(inst->popup->comp_object,
