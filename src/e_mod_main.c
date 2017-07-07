@@ -54,7 +54,7 @@ typedef struct
    const Server_Config *scfg;
    Ecore_File_Monitor *torrents_dir_monitor;
 
-   Eina_Bool reload : 1;
+   Eina_Bool clear : 1;
 } Instance;
 
 typedef struct
@@ -83,7 +83,8 @@ typedef struct
    Eo *download_button, *download_icon;
 
    Eo *download_exe;
-   Eina_Bool alive : 1;
+
+   Eina_Bool valid : 1;
 } Item_Desc;
 
 static Eet_Data_Descriptor *_config_edd = NULL;
@@ -484,8 +485,9 @@ _box_update(Instance *inst)
 
    if (!inst->main_box) return;
 
-   if (!inst->items_list)
+   if (inst->clear)
      {
+        inst->clear = EINA_FALSE;
         elm_box_clear(inst->main_box);
         _label_create(inst->main_box, "No connection", &inst->no_conn_label);
         elm_box_pack_end(inst->main_box, inst->no_conn_label);
@@ -512,12 +514,6 @@ _box_update(Instance *inst)
         elm_box_pack_end(inst->main_box, o);
         evas_object_show(o);
         efl_wref_add(o, &inst->items_table);
-        inst->reload = EINA_TRUE;
-     }
-
-   if (inst->reload)
-     {
-        elm_table_clear(inst->items_table, EINA_TRUE);
 
         elm_table_pack(inst->items_table,
               _label_create(inst->items_table, "<b>Torrent name</b>", NULL),
@@ -537,12 +533,18 @@ _box_update(Instance *inst)
         elm_table_pack(inst->items_table,
               _label_create(inst->items_table, "<b>Ratio</b>", NULL),
               RATIO_COL, 0, 1, 1);
-
-        inst->reload = EINA_FALSE;
      }
 
    EINA_LIST_FOREACH(inst->items_list, itr, d)
      {
+        if (!d->valid)
+          {
+             int i;
+             for (i = NAME_COL; i <= DEL_COL; i++)
+                efl_del(elm_table_child_get(inst->items_table, i, d->table_idx));
+             d->table_idx = 0;
+             continue;
+          }
         if (!d->table_idx)
           {
              Eina_Bool found = EINA_TRUE;
@@ -590,6 +592,12 @@ _box_update(Instance *inst)
         _icon_create(inst->items_table, "application-exit", &d->del_icon);
         _button_create(inst->items_table, NULL, d->del_icon, &d->del_button, _del_bt_clicked, d);
         elm_table_pack(inst->items_table, d->del_button, DEL_COL, d->table_idx, 1, 1);
+     }
+   EINA_LIST_FOREACH_SAFE(inst->items_list, itr, itr2, d)
+     {
+        if (d->valid) continue;
+        inst->items_list = eina_list_remove(inst->items_list, d);
+        free(d);
      }
 }
 
@@ -831,10 +839,13 @@ _item_find_by_name(const Eina_List *lst, const char *name)
 static Eina_Bool
 _json_data_parse(Instance *inst)
 {
+   Eina_List *itr;
+   Item_Desc *d;
    Lexer l;
    l.buffer = inst->torrents_data_buf;
    _lexer_reset(&l);
    if (!_is_next_token(&l, "{")) return EINA_FALSE;
+   EINA_LIST_FOREACH(inst->items_list, itr, d) d->valid = EINA_FALSE;
    if (_is_next_token(&l, "\"arguments\":{"))
      {
         if (_is_next_token(&l, "\"torrents\":["))
@@ -939,23 +950,23 @@ _json_data_parse(Instance *inst)
                     }
                   if (id)
                     {
-                       Item_Desc *d = _item_find_by_name(inst->items_list, name);
+                       d = _item_find_by_name(inst->items_list, name);
                        File_Info *info;
                        if (!d)
                          {
+                            printf("New item\n");
                             d = calloc(1, sizeof(Item_Desc));
                             d->inst = inst;
                             d->id = id;
                             d->name = eina_stringshare_add(name);
                             inst->items_list = eina_list_append(inst->items_list, d);
-                            inst->reload = EINA_TRUE;
                          }
                        EINA_LIST_FREE(d->files, info)
                          {
                             free(info->full_name);
                             free(info);
                          }
-                       d->alive = EINA_TRUE;
+                       d->valid = EINA_TRUE;
                        d->size = size;
                        d->downrate = downrate;
                        d->uprate = uprate;
@@ -970,24 +981,6 @@ _json_data_parse(Instance *inst)
           }
      }
    return EINA_TRUE;
-}
-
-static void
-_items_clear(Instance *inst)
-{
-   Eina_List *itr, *itr2;
-   Item_Desc *d;
-   EINA_LIST_FOREACH_SAFE(inst->items_list, itr, itr2, d)
-     {
-        if (!d->alive)
-          {
-             evas_object_del(inst->items_table);
-             inst->items_list = eina_list_remove_list(inst->items_list, itr);
-             inst->reload = EINA_TRUE;
-             free(d);
-          }
-        else d->alive = EINA_FALSE;
-     }
 }
 
 static void
@@ -1008,7 +1001,6 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    else
      {
         _json_data_parse(inst);
-        _items_clear(inst);
         _box_update(inst);
      }
    inst->torrents_data_len = 0;
@@ -1023,7 +1015,7 @@ _torrents_poller_cb(void *data)
    char url[1024];
    if (!inst->session_id)
      {
-        _items_clear(inst);
+        inst->clear = EINA_TRUE;
         _box_update(inst);
         return EINA_TRUE;
      }
