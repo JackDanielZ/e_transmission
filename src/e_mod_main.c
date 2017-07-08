@@ -57,13 +57,6 @@ typedef struct
 
 typedef struct
 {
-   char *full_name;
-   unsigned int cur_len;
-   unsigned int total_len;
-} File_Info;
-
-typedef struct
-{
    Instance *inst;
    const char *name;
    unsigned long size;
@@ -84,6 +77,14 @@ typedef struct
 
    Eina_Bool valid : 1;
 } Item_Desc;
+
+typedef struct
+{
+   Item_Desc *d;
+   char *full_name;
+   unsigned int cur_len;
+   unsigned int total_len;
+} File_Info;
 
 static Eet_Data_Descriptor *_config_edd = NULL;
 
@@ -294,6 +295,7 @@ _download_tooltip_hide(void *data EINA_UNUSED, Evas *e EINA_UNUSED, Evas_Object 
 static void
 _tooltip_enable(Eo *obj, Eina_Bool enable)
 {
+   if (!obj) return;
    elm_object_disabled_set(obj, enable);
    if (enable)
      {
@@ -336,30 +338,71 @@ _rsync_output_cb(void *data, int type EINA_UNUSED, void *event)
 }
 
 static void
-_download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
+_file_download(File_Info *info)
 {
-   Item_Desc *d = data;
+   char cmd[1024];
+   Item_Desc *d = info->d;
    Instance *inst = d->inst;
-   if (!inst->session_id) return;
-   if (eina_list_count(d->files) == 1)
-     {
-        char cmd[1024];
-        File_Info *info = eina_list_data_get(d->files);
-        sprintf(cmd, "rsync -avzhP --protect-args --inplace %s:%s/\"%s\" /home/daniel/Desktop/Downloads",
-              inst->scfg->download_server, inst->scfg->remote_dir, info->full_name);
-        d->download_exe = ecore_exe_pipe_run(cmd, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, d);
-        efl_wref_add(d->download_exe, &(d->download_exe));
-        elm_object_tooltip_text_set(obj, "");
-        elm_object_tooltip_show(obj);
-        _tooltip_enable(obj, EINA_TRUE);
-        printf("Download %s\n", info->full_name);
-     }
+   sprintf(cmd, "rsync -avzhP --protect-args --inplace %s:%s/\"%s\" /home/daniel/Desktop/Downloads",
+         inst->scfg->download_server, inst->scfg->remote_dir, info->full_name);
+   d->download_exe = ecore_exe_pipe_run(cmd, ECORE_EXE_PIPE_READ | ECORE_EXE_PIPE_ERROR, d);
+   efl_wref_add(d->download_exe, &(d->download_exe));
+   elm_object_tooltip_text_set(d->download_button, "");
+   elm_object_tooltip_show(d->download_button);
+   _tooltip_enable(d->download_button, EINA_TRUE);
+   printf("Download %s\n", info->full_name);
+}
+
+static void
+_menu_download_selected(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+   File_Info *info = data;
+   _file_download(info);
 }
 
 static void
 _lexer_reset(Lexer *l)
 {
    l->current = l->buffer;
+}
+
+static void
+_download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
+{
+   Item_Desc *d = data;
+   Instance *inst = d->inst;
+   File_Info *info;
+   if (!inst->session_id) return;
+   if (eina_list_count(d->files) == 1)
+     {
+        info = eina_list_data_get(d->files);
+        _file_download(info);
+     }
+   else
+     {
+        Eina_List *itr;
+        Eo *hv = elm_hover_add(inst->main_box);
+#ifndef STAND_ALONE
+        evas_object_layer_set(hv, E_LAYER_MENU);
+#endif
+        elm_hover_parent_set(hv, inst->main_box);
+        elm_hover_target_set(hv, obj);
+        efl_gfx_visible_set(hv, EINA_TRUE);
+        Eo *bx = elm_box_add(hv);
+        elm_box_homogeneous_set(bx, EINA_TRUE);
+        EINA_LIST_FOREACH(d->files, itr, info)
+          {
+             Eo *bt = elm_button_add(bx);
+             elm_object_text_set(bt, info->full_name);
+             evas_object_size_hint_weight_set(bt, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+             evas_object_size_hint_align_set(bt, EVAS_HINT_FILL, EVAS_HINT_FILL);
+             evas_object_smart_callback_add(bt, "clicked", _menu_download_selected, info);
+             elm_box_pack_end(bx, bt);
+             evas_object_show(bt);
+          }
+        evas_object_show(bx);
+        elm_object_part_content_set(hv, "bottom", bx);
+     }
 }
 
 static void
@@ -956,11 +999,16 @@ _json_data_parse(Instance *inst)
                             d->id = id;
                             d->name = eina_stringshare_add(name);
                             inst->items_list = eina_list_append(inst->items_list, d);
+                            d->files = files_info;
+                            EINA_LIST_FOREACH(files_info, itr, info) info->d = d;
                          }
-                       EINA_LIST_FREE(d->files, info)
+                       else
                          {
-                            free(info->full_name);
-                            free(info);
+                            EINA_LIST_FREE(files_info, info)
+                              {
+                                 free(info->full_name);
+                                 free(info);
+                              }
                          }
                        d->valid = EINA_TRUE;
                        d->size = size;
@@ -969,7 +1017,6 @@ _json_data_parse(Instance *inst)
                        d->ratio = ratio;
                        d->status = status;
                        d->done = 100.0 - (100 * ((double)leftuntildone / size));
-                       d->files = files_info;
                        free(name);
                     }
                   _is_next_token(&l, ",");
