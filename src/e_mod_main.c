@@ -974,6 +974,10 @@ _json_data_parse(Instance *inst)
                                            filename[l.current - begin] = '\0';
                                            JUMP_AT(&l, ",", EINA_TRUE, "}", EINA_FALSE);
                                         }
+                                      else
+                                        {
+                                           return EINA_FALSE;
+                                        }
                                    }
                                  info = malloc(sizeof(*info));
                                  info->cur_len = cur;
@@ -1044,8 +1048,8 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
      }
    else
      {
-        _json_data_parse(inst);
-        _box_update(inst, EINA_FALSE);
+        if (_json_data_parse(inst))
+           _box_update(inst, EINA_FALSE);
      }
    inst->torrents_data_len = 0;
 }
