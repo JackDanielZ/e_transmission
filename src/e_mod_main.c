@@ -694,7 +694,6 @@ _torrents_dir_changed(void *data,
       Ecore_File_Monitor *em EINA_UNUSED,
       Ecore_File_Event event, const char *path EINA_UNUSED)
 {
-   if (event != ECORE_FILE_EVENT_CREATED_FILE) return;
    Instance *inst = data;
    Eina_List *l = ecore_file_ls(inst->scfg->torrents_dir);
    char *file;
