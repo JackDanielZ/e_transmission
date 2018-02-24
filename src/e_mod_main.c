@@ -214,7 +214,7 @@ _dialer_delete(void *data EINA_UNUSED, const Efl_Event *ev)
 static Efl_Net_Dialer_Http *
 _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
 {
-   Eo *dialer = efl_add(EFL_NET_DIALER_HTTP_CLASS, ecore_main_loop_get(),
+   Eo *dialer = efl_add(EFL_NET_DIALER_HTTP_CLASS, efl_main_loop_get(),
          efl_net_dialer_http_method_set(efl_added, is_get_method?"GET":"POST"),
          efl_net_dialer_proxy_set(efl_added, NULL),
          efl_net_dialer_http_request_header_add(efl_added, "Accept-Encoding", "identity"),
