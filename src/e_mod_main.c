@@ -401,7 +401,7 @@ _download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
              evas_object_show(bt);
           }
         evas_object_show(bx);
-        elm_object_part_content_set(hv, "bottom", bx);
+        elm_object_part_content_set(hv, "top", bx);
      }
 }
 
