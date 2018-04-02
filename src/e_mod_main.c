@@ -36,6 +36,13 @@ typedef struct
 
 typedef struct
 {
+   char *data;
+   unsigned int max_len;
+   unsigned int len;
+} Download_Buffer;
+
+typedef struct
+{
 #ifndef STAND_ALONE
    E_Gadcon_Client *gcc;
    E_Gadcon_Popup *popup;
@@ -46,10 +53,7 @@ typedef struct
    Eo *main_box, *items_table, *no_conn_label, *error_label;
    Eina_List *items_list;
    char *session_id;
-   char *torrents_data_buf;
    char *last_error;
-   unsigned int torrents_data_buf_len;
-   unsigned int torrents_data_len;
 
    const Server_Config *scfg;
    Ecore_File_Monitor *torrents_dir_monitor;
@@ -175,7 +179,7 @@ _can_read_changed(void *data EINA_UNUSED, const Efl_Event *ev)
    static int max_size = 16384;
    Eina_Rw_Slice slice;
    Eo *dialer = ev->object;
-   Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
+   Download_Buffer *buf = efl_key_data_get(dialer, "Download_Buffer");
    if (efl_key_data_get(dialer, "can_read_changed")) return;
    efl_key_data_set(dialer, "can_read_changed", dialer);
 
@@ -185,16 +189,14 @@ _can_read_changed(void *data EINA_UNUSED, const Efl_Event *ev)
    while (efl_io_reader_can_read_get(dialer))
      {
         if (efl_io_reader_read(dialer, &slice)) goto ret;
-        if (slice.len > (inst->torrents_data_buf_len - inst->torrents_data_len))
+        if (slice.len > (buf->max_len - buf->len))
           {
-             inst->torrents_data_buf_len = inst->torrents_data_len + slice.len;
-             inst->torrents_data_buf = realloc(inst->torrents_data_buf,
-                   inst->torrents_data_buf_len + 1);
+             buf->max_len = buf->len + slice.len;
+             buf->data = realloc(buf->data, buf->max_len + 1);
           }
-        memcpy(inst->torrents_data_buf + inst->torrents_data_len,
-              slice.mem, slice.len);
-        inst->torrents_data_len += slice.len;
-        inst->torrents_data_buf[inst->torrents_data_len] = '\0';
+        memcpy(buf->data + buf->len, slice.mem, slice.len);
+        buf->len += slice.len;
+        buf->data[buf->len] = '\0';
         slice.len = max_size;
      }
 ret:
@@ -206,6 +208,9 @@ static void
 _dialer_delete(void *data EINA_UNUSED, const Efl_Event *ev)
 {
    Eo *dialer = ev->object;
+   Download_Buffer *buf = efl_key_data_get(dialer, "Download_Buffer");
+   free(buf->data);
+   free(buf);
    efl_del(efl_key_data_get(dialer, "post-buffer"));
    efl_del(efl_key_data_get(dialer, "copier-buffer-dialer"));
    efl_del(dialer);
@@ -220,7 +225,7 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
          efl_net_dialer_http_request_header_add(efl_added, "Accept-Encoding", "identity"),
          efl_event_callback_add(efl_added, EFL_IO_READER_EVENT_CAN_READ_CHANGED, _can_read_changed, NULL));
    if (cb)
-      efl_event_callback_add(dialer, EFL_IO_READER_EVENT_EOS, cb, NULL);
+      efl_event_callback_priority_add(dialer, EFL_IO_READER_EVENT_EOS, EFL_CALLBACK_PRIORITY_BEFORE, cb, NULL);
    efl_event_callback_add(dialer, EFL_IO_READER_EVENT_EOS, _dialer_delete, NULL);
 
    if (!is_get_method && data)
@@ -240,6 +245,8 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
               efl_io_closer_close_on_destructor_set(efl_added, EINA_FALSE));
         efl_key_data_set(dialer, "copier-buffer-dialer", copier);
      }
+   Download_Buffer *buf = calloc(1, sizeof(*buf));
+   efl_key_data_set(dialer, "Download_Buffer", buf);
 
    return dialer;
 }
@@ -692,7 +699,7 @@ end:
 static void
 _torrents_dir_changed(void *data,
       Ecore_File_Monitor *em EINA_UNUSED,
-      Ecore_File_Event event, const char *path EINA_UNUSED)
+      Ecore_File_Event event EINA_UNUSED, const char *path EINA_UNUSED)
 {
    Instance *inst = data;
    Eina_List *l = ecore_file_ls(inst->scfg->torrents_dir);
@@ -712,11 +719,22 @@ static void
 _torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
    Instance *inst = efl_key_data_get(ev->object, "Transmission_Instance");
+   Download_Buffer *buf = efl_key_data_get(ev->object, "Download_Buffer");
    Eina_Stringshare *name = efl_key_data_get(ev->object, "Transmission_FileToRemove");
-   remove(name);
+   char *result_str = strstr(buf->data, "\"result\":");
+   if (!result_str) return;
+   if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
+     {
+        if (inst->last_error) free(inst->last_error);
+        char *end = strchr(result_str + strlen("\"result\":\""), '\"');
+        inst->last_error = malloc(end - result_str + 1);
+        strncpy(inst->last_error, result_str, end - result_str);
+     }
+   else
+     {
+        remove(name);
+     }
    eina_stringshare_del(name);
-   _torrents_dir_changed(inst, NULL, ECORE_FILE_EVENT_MODIFIED, NULL);
-   inst->torrents_data_len = 0;
 }
 
 static Instance *
@@ -810,11 +828,12 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
 //   printf("TRANS: In - %s\n", __FUNCTION__);
    Efl_Net_Dialer_Http *dialer = ev->object;
+   Download_Buffer *buf = efl_key_data_get(ev->object, "Download_Buffer");
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
 
-   if (inst->torrents_data_len)
+   if (buf->len)
      {
-        char *id = strstr(inst->torrents_data_buf, "X-Transmission-Session-Id: ");
+        char *id = strstr(buf->data, "X-Transmission-Session-Id: ");
         if (id)
           {
              char *end = strchr(id, '<');
@@ -837,7 +856,6 @@ _session_id_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
              inst->session_id = NULL;
           }
      }
-   inst->torrents_data_len = 0;
 }
 
 static Eina_Bool
@@ -877,12 +895,12 @@ _item_find_by_name(const Eina_List *lst, const char *name)
 }
 
 static Eina_Bool
-_json_data_parse(Instance *inst)
+_json_data_parse(Instance *inst, Download_Buffer *buf)
 {
    Eina_List *itr;
    Item_Desc *d;
    Lexer l;
-   l.buffer = inst->torrents_data_buf;
+   l.buffer = buf->data;
    _lexer_reset(&l);
    if (!_is_next_token(&l, "{")) return EINA_FALSE;
    EINA_LIST_FOREACH(inst->items_list, itr, d) d->valid = EINA_FALSE;
@@ -1035,7 +1053,8 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 {
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
-   char *result_str = strstr(inst->torrents_data_buf, "\"result\":");
+   Download_Buffer *buf = efl_key_data_get(ev->object, "Download_Buffer");
+   char *result_str = strstr(buf->data, "\"result\":");
 //   printf("TRANS: In - %s\n", __FUNCTION__);
    if (!result_str) return;
    if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
@@ -1047,10 +1066,9 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
      }
    else
      {
-        if (_json_data_parse(inst))
+        if (_json_data_parse(inst, buf))
            _box_update(inst, EINA_FALSE);
      }
-   inst->torrents_data_len = 0;
 }
 
 static Eina_Bool
