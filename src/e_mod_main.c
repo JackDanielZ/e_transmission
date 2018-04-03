@@ -1054,20 +1054,23 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
    Efl_Net_Dialer_Http *dialer = ev->object;
    Instance *inst = efl_key_data_get(dialer, "Transmission_Instance");
    Download_Buffer *buf = efl_key_data_get(ev->object, "Download_Buffer");
-   char *result_str = strstr(buf->data, "\"result\":");
-//   printf("TRANS: In - %s\n", __FUNCTION__);
-   if (!result_str) return;
-   if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
+   if (buf && buf->data)
      {
-        if (inst->last_error) free(inst->last_error);
-        char *end = strchr(result_str + strlen("\"result\":\""), '\"');
-        inst->last_error = malloc(end - result_str + 1);
-        strncpy(inst->last_error, result_str, end - result_str);
-     }
-   else
-     {
-        if (_json_data_parse(inst, buf))
-           _box_update(inst, EINA_FALSE);
+        char *result_str = strstr(buf->data, "\"result\":");
+        //   printf("TRANS: In - %s\n", __FUNCTION__);
+        if (!result_str) return;
+        if (strncmp(result_str + strlen("\"result\":"), "\"success\"", 9))
+          {
+             if (inst->last_error) free(inst->last_error);
+             char *end = strchr(result_str + strlen("\"result\":\""), '\"');
+             inst->last_error = malloc(end - result_str + 1);
+             strncpy(inst->last_error, result_str, end - result_str);
+          }
+        else
+          {
+             if (_json_data_parse(inst, buf))
+                _box_update(inst, EINA_FALSE);
+          }
      }
 }
 
