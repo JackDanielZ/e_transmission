@@ -233,7 +233,7 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
         Eina_Slice slice = { .mem = data, .len = strlen(data) };
         Eo *buffer = efl_add(EFL_IO_BUFFER_CLASS, efl_loop_get(dialer),
               efl_name_set(efl_added, "post-buffer"),
-              efl_io_closer_close_on_destructor_set(efl_added, EINA_TRUE),
+              efl_io_closer_close_on_invalidate_set(efl_added, EINA_TRUE),
               efl_io_closer_close_on_exec_set(efl_added, EINA_TRUE));
         efl_io_writer_write(buffer, &slice, NULL);
         efl_key_data_set(dialer, "post-buffer", buffer);
@@ -242,7 +242,7 @@ _dialer_create(Eina_Bool is_get_method, const char *data, Efl_Event_Cb cb)
               efl_name_set(efl_added, "copier-buffer-dialer"),
               efl_io_copier_source_set(efl_added, buffer),
               efl_io_copier_destination_set(efl_added, dialer),
-              efl_io_closer_close_on_destructor_set(efl_added, EINA_FALSE));
+              efl_io_closer_close_on_invalidate_set(efl_added, EINA_FALSE));
         efl_key_data_set(dialer, "copier-buffer-dialer", copier);
      }
    Download_Buffer *buf = calloc(1, sizeof(*buf));
@@ -394,7 +394,7 @@ _download_bt_clicked(void *data, Evas_Object *obj, void *event_info EINA_UNUSED)
 #endif
         elm_hover_parent_set(hv, inst->main_box);
         elm_hover_target_set(hv, obj);
-        efl_gfx_visible_set(hv, EINA_TRUE);
+        efl_gfx_entity_visible_set(hv, EINA_TRUE);
         Eo *bx = elm_box_add(hv);
         elm_box_homogeneous_set(bx, EINA_TRUE);
         EINA_LIST_FOREACH(d->files, itr, info)
