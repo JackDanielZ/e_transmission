@@ -1,0 +1,3 @@
+[submodule "ezplug"]
+	path = ezplug
+	url = https://github.com/JackDanielZ/ezplug.git
