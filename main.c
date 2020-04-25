@@ -43,12 +43,18 @@ typedef struct
    Ecore_Timer *torrents_poller_timer;
    Evas_Object *o_icon;
    Eo *main_box, *items_table, *no_conn_label, *error_label;
+   /* Window used to invoke elm_cnp_selection_get
+    * Needed when --socket is provided as it seems
+    * CNP doesn't work with a socket window */
+   Eo *cnp_win;
    Eina_List *items_list;
    char *session_id;
    char *last_error;
 
    const Server_Config *scfg;
    Ecore_File_Monitor *torrents_dir_monitor;
+
+   Eina_Bool magnet_confirmation : 1;
 } Instance;
 
 typedef struct
@@ -85,6 +91,8 @@ typedef struct
 static Eet_Data_Descriptor *_config_edd = NULL;
 
 static Config *_config = NULL;
+
+static char _clipboard_prev_data[10000] = { 0 };
 
 static char encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
                                 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
@@ -675,7 +683,7 @@ static void
 _torrent_added_cb(void *data EINA_UNUSED, const Efl_Event *ev);
 
 static Eina_Bool
-_torrent_add(Instance *inst, const char *file)
+_torrent_add(Instance *inst, const char *file, Eina_Bool is_link)
 {
    char url[1024], full_path[256];
    char *content = NULL, *ret_content = NULL, *request = NULL;
@@ -684,26 +692,37 @@ _torrent_add(Instance *inst, const char *file)
    Eina_Bool ret = EINA_FALSE;
    if (!inst->session_id) goto end;
 
-   sprintf(full_path, "%s/%s", inst->scfg->torrents_dir, file);
-   fp = fopen(full_path, "rb");
-   if (!fp)
+   if (!is_link)
+   {
+     sprintf(full_path, "%s/%s", inst->scfg->torrents_dir, file);
+     fp = fopen(full_path, "rb");
+     if (!fp)
      {
-        printf("Can't open file %s\n", full_path);
-        goto end;
+       printf("Can't open file %s\n", full_path);
+       goto end;
      }
-   fseek(fp, 0, SEEK_END);
-   filesize = ftell(fp);
-   if (filesize < 0) goto end;
-   fseek(fp, 0, SEEK_SET);
-   content = malloc(filesize + 1);
-   if (fread(content, filesize, 1, fp) != 1) goto end;
-   content[filesize] = '\0';
+     fseek(fp, 0, SEEK_END);
+     filesize = ftell(fp);
+     if (filesize < 0) goto end;
+     fseek(fp, 0, SEEK_SET);
+     content = malloc(filesize + 1);
+     if (fread(content, filesize, 1, fp) != 1) goto end;
+     content[filesize] = '\0';
 
-   ret_content = _base64_encode(content, filesize, &retsize);
-   request = malloc(retsize + 256);
-   sprintf(request,
+     ret_content = _base64_encode(content, filesize, &retsize);
+     request = malloc(retsize + 256);
+     sprintf(request,
          "{\"method\":\"torrent-add\", "
          "\"arguments\":{\"metainfo\":\"%s\"}}", ret_content);
+   }
+   else
+   {
+     request = malloc(strlen(file) + 256);
+     sprintf(request,
+         "{\"method\":\"torrent-add\", "
+         "\"arguments\":{\"filename\":\"%s\"}}", file);
+   }
+
    sprintf(url, baseUrl, inst->scfg->hostname);
    Efl_Net_Dialer_Http *dialer = _dialer_create(EINA_FALSE, request, _torrent_added_cb);
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
@@ -732,7 +751,7 @@ _torrents_dir_changed(void *data,
      {
         if (!stop && eina_str_has_suffix(file, ".torrent"))
           {
-             stop = _torrent_add(inst, file);
+             stop = _torrent_add(inst, file, EINA_FALSE);
           }
         free(file);
      }
@@ -1097,6 +1116,97 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
      }
 }
 
+static void
+_magnet_download(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
+{
+  _torrent_add(data, _clipboard_prev_data, EINA_TRUE);
+  efl_del(elm_win_get(bt));
+}
+
+static void
+_magnet_cancel(void *data EINA_UNUSED, Evas_Object *bt, void *event_info EINA_UNUSED)
+{
+  efl_del(elm_win_get(bt));
+}
+
+void
+_magnet_win_del_cb(void *data, Evas_Object *obj EINA_UNUSED, void *event_info EINA_UNUSED)
+{
+  Instance *inst = data;
+  inst->magnet_confirmation = EINA_FALSE;
+}
+
+static Eina_Bool
+_clipboard_buffer_check(void *data, Evas_Object *obj EINA_UNUSED, Elm_Selection_Data *sel_data)
+{
+  Instance *inst = data;
+
+  if (inst->magnet_confirmation) return EINA_FALSE;
+  if (!sel_data->len) return EINA_FALSE;
+  if (sel_data->len > sizeof(_clipboard_prev_data)) return EINA_FALSE;
+  if (!strcmp(sel_data->data, _clipboard_prev_data)) return EINA_FALSE;
+
+  memcpy(_clipboard_prev_data, sel_data->data, sel_data->len + 1);
+
+  printf("Sel: %s\n", (char *)sel_data->data);
+
+  if (strstr(sel_data->data, "magnet:") == sel_data->data)
+  {
+    // Magnet link
+    Eo *dia_win, *bg, *bx, *but_bx, *lb, *bt;
+    char buf[100];
+
+    inst->magnet_confirmation = EINA_TRUE;
+
+    dia_win = elm_win_add(NULL, "Add magnet link", ELM_WIN_BASIC);
+    evas_object_smart_callback_add(dia_win, "delete,request", _magnet_win_del_cb, inst);
+    elm_win_autodel_set(dia_win, EINA_TRUE);
+    elm_win_center(dia_win, EINA_TRUE, EINA_FALSE);
+
+    bg = elm_bg_add(dia_win);
+    evas_object_size_hint_weight_set(bg, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+    evas_object_size_hint_align_set(bg, EVAS_HINT_FILL, EVAS_HINT_FILL);
+    evas_object_show(bg);
+    elm_win_resize_object_add(dia_win, bg);
+
+    bx = elm_box_add(dia_win);
+    evas_object_size_hint_align_set(bx, EVAS_HINT_FILL, EVAS_HINT_FILL);
+    evas_object_size_hint_weight_set(bx, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
+    evas_object_show(bx);
+    elm_win_resize_object_add(dia_win, bx);
+
+    lb = elm_label_add(dia_win);
+    elm_object_text_set(lb, "Magnet to download:");
+    evas_object_size_hint_weight_set(lb, EVAS_HINT_EXPAND, 0);
+    evas_object_show(lb);
+    elm_box_pack_end(bx, lb);
+
+    lb = elm_label_add(dia_win);
+    strncpy(buf, sel_data->data, sizeof(buf));
+    memcpy(buf + sizeof(buf) - 4, "...", 4);
+    elm_object_text_set(lb, buf);
+    evas_object_size_hint_weight_set(lb, EVAS_HINT_EXPAND, 0);
+    evas_object_show(lb);
+    elm_box_pack_end(bx, lb);
+
+    but_bx = elm_box_add(dia_win);
+    elm_box_horizontal_set(but_bx, EINA_TRUE);
+    evas_object_show(but_bx);
+    elm_box_pack_end(bx, but_bx);
+
+    bt = _button_create(but_bx, "Download", NULL, NULL, _magnet_download, inst);
+    elm_box_pack_end(but_bx, bt);
+
+    bt = _button_create(but_bx, "No way", NULL, NULL, _magnet_cancel, NULL);
+    elm_box_pack_end(but_bx, bt);
+
+    evas_object_resize(dia_win, 200, 150);
+    evas_object_show(dia_win);
+  }
+
+  return EINA_TRUE;
+}
+
 static Eina_Bool
 _torrents_poller_cb(void *data)
 {
@@ -1114,6 +1224,10 @@ _torrents_poller_cb(void *data)
    efl_net_dialer_http_request_header_add(dialer, "X-Transmission-Session-Id", inst->session_id);
    efl_key_data_set(dialer, "Transmission_Instance", inst);
    efl_net_dialer_dial(dialer, url);
+
+   elm_cnp_selection_get(inst->cnp_win, ELM_SEL_TYPE_CLIPBOARD, ELM_SEL_FORMAT_TEXT,
+       _clipboard_buffer_check, inst);
+
    return EINA_TRUE;
 }
 
@@ -1165,6 +1279,8 @@ int main(int argc, char **argv)
    {
      win = elm_win_add(NULL, "Transmission", ELM_WIN_BASIC);
    }
+
+   inst->cnp_win = elm_win_add(NULL, "CNP Window", ELM_WIN_BASIC);
 
    bg = elm_bg_add(win);
    evas_object_size_hint_weight_set(bg, EVAS_HINT_EXPAND, EVAS_HINT_EXPAND);
