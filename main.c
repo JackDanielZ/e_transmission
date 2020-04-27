@@ -1119,13 +1119,17 @@ _torrents_stats_get_cb(void *data EINA_UNUSED, const Efl_Event *ev)
 static void
 _magnet_download(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
 {
-  _torrent_add(data, _clipboard_prev_data, EINA_TRUE);
+  Instance *inst = data;
+  _torrent_add(inst, _clipboard_prev_data, EINA_TRUE);
+  inst->magnet_confirmation = EINA_FALSE;
   efl_del(elm_win_get(bt));
 }
 
 static void
-_magnet_cancel(void *data EINA_UNUSED, Evas_Object *bt, void *event_info EINA_UNUSED)
+_magnet_cancel(void *data, Evas_Object *bt, void *event_info EINA_UNUSED)
 {
+  Instance *inst = data;
+  inst->magnet_confirmation = EINA_FALSE;
   efl_del(elm_win_get(bt));
 }
 
@@ -1197,7 +1201,7 @@ _clipboard_buffer_check(void *data, Evas_Object *obj EINA_UNUSED, Elm_Selection_
     bt = _button_create(but_bx, "Download", NULL, NULL, _magnet_download, inst);
     elm_box_pack_end(but_bx, bt);
 
-    bt = _button_create(but_bx, "No way", NULL, NULL, _magnet_cancel, NULL);
+    bt = _button_create(but_bx, "No way", NULL, NULL, _magnet_cancel, inst);
     elm_box_pack_end(but_bx, bt);
 
     evas_object_resize(dia_win, 200, 150);
